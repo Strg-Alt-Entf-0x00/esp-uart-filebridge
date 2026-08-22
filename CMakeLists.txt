@@ -2,7 +2,7 @@
 
 idf_component_register(
     SRCS
-        "src/esp_uart_filebridge.c"
+        "src/esp_uart_filebridge.cpp"
         "src/file_protocol.cpp"
         "src/filesystem_manager.cpp"
     INCLUDE_DIRS
@@ -16,5 +16,6 @@ idf_component_register(
         vfs
         freertos
         log
-        newlib
 )
+
+

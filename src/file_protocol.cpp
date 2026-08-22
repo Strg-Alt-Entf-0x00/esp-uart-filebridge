@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ESP32-P4 USB Bridge File Manager - File Protocol Implementation
  * Part 1: Core infrastructure and basic commands
  */
@@ -368,7 +368,7 @@ void FileProtocol::handle_device_info() {
             info.sd_size = ((uint64_t)card->csd.capacity) * card->csd.sector_size;
             
             uint64_t sd_total = 0, sd_free = 0;
-            if (m_fs_manager->get_space_info(MOUNT_POINT_SD, &sd_total, &sd_free) == ESP_OK) {
+            if (m_fs_manager->get_space_info(CONFIG_UART_FILEBRIDGE_SD_MOUNT_POINT, &sd_total, &sd_free) == ESP_OK) {
                 info.sd_free = sd_free;
             }
             
@@ -926,3 +926,4 @@ void FileProtocol::handle_format_fs(const uint8_t* payload, uint16_t length) {
         send_error(ERR_IO_ERROR);
     }
 }
+

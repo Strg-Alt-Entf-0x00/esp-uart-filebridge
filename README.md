@@ -29,7 +29,7 @@ Add to your project's `main/idf_component.yml`:
 ```yaml
 dependencies:
   ghost/esp-uart-filebridge:
-    git: https://github.com/Ghost/esp-uart-filebridge.git
+    git: https://github.com/Strg-Alt-Entf-0x00/esp-uart-filebridge.git
     version: ">=1.0.0"
 ```
 
@@ -110,3 +110,4 @@ Tested on ESP32-P4 @ 360 MHz with FT232R @ 3 Mbit/s + RTS/CTS:
 ## License
 
 MIT - see LICENSE file.
+

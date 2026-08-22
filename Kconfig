@@ -1,4 +1,4 @@
-﻿menu "ESP UART File Bridge"
+menu "ESP UART File Bridge"
 
     config UART_FILEBRIDGE_NUM
         int "UART port number"
