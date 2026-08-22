@@ -1,0 +1,114 @@
+﻿menu "ESP UART File Bridge"
+
+    config UART_FILEBRIDGE_NUM
+        int "UART port number"
+        default 1
+        range 0 2
+        help
+            UART peripheral number to use for file bridge.
+            UART0 is usually the console - use UART1 or UART2.
+
+    config UART_FILEBRIDGE_TX_PIN
+        int "UART TX GPIO pin"
+        default 30
+        help
+            GPIO pin for UART TX. Default 30 matches Waveshare ESP32-P4-WIFI6
+            board with FT232R adapter.
+
+    config UART_FILEBRIDGE_RX_PIN
+        int "UART RX GPIO pin"
+        default 31
+        help
+            GPIO pin for UART RX.
+
+    config UART_FILEBRIDGE_RTS_PIN
+        int "UART RTS GPIO pin (Hardware Flow Control)"
+        default 50
+        help
+            GPIO pin for UART RTS. Required for Hardware Flow Control.
+            Set to -1 to disable HW flow control (not recommended at 3 Mbit/s).
+
+    config UART_FILEBRIDGE_CTS_PIN
+        int "UART CTS GPIO pin (Hardware Flow Control)"
+        default 29
+        help
+            GPIO pin for UART CTS. Required for Hardware Flow Control.
+            Set to -1 to disable HW flow control (not recommended at 3 Mbit/s).
+
+    config UART_FILEBRIDGE_BAUD
+        int "Baud rate"
+        default 3000000
+        help
+            UART baud rate. 3000000 (3 Mbit/s) is the FT232R maximum and
+            optimal for SD card throughput (~285 KB/s effective).
+            Reduce if experiencing connection issues.
+
+    config UART_FILEBRIDGE_RX_BUF_SIZE
+        int "UART RX buffer size (bytes)"
+        default 8192
+        help
+            Size of UART hardware RX ring buffer. Must be >= chunk size (8192).
+            Increase if experiencing RX overflows.
+
+    config UART_FILEBRIDGE_TX_BUF_SIZE
+        int "UART TX buffer size (bytes)"
+        default 8192
+        help
+            Size of UART hardware TX ring buffer.
+
+    config UART_FILEBRIDGE_TASK_STACK
+        int "RX task stack size (bytes)"
+        default 16384
+        help
+            Stack size for the UART RX processing task.
+
+    config UART_FILEBRIDGE_TASK_PRIO
+        int "RX task priority"
+        default 5
+        range 1 24
+        help
+            FreeRTOS priority for the UART RX task. Keep below audio/real-time
+            tasks (typically priority >= 10).
+
+    config UART_FILEBRIDGE_SD_MOUNT_POINT
+        string "SD card VFS mount point"
+        default "/sd"
+        help
+            VFS path where the SD card is (or will be) mounted.
+
+    config UART_FILEBRIDGE_SD_MOUNT_OWN
+        bool "Mount SD card internally (component manages SD lifecycle)"
+        default y
+        help
+            If enabled, esp_uart_filebridge_init() will mount the SD card.
+            Disable if your application already mounts the SD card elsewhere
+            and passes the mount point for shared access.
+
+    config UART_FILEBRIDGE_SD_MAX_FILES
+        int "Maximum simultaneously open SD files"
+        default 5
+        depends on UART_FILEBRIDGE_SD_MOUNT_OWN
+        help
+            Passed to esp_vfs_fat_sdmmc_mount(). Each open file costs ~4 KB.
+
+    menu "ESP32-P4 SD LDO Power Control"
+        depends on IDF_TARGET_ESP32P4
+
+        config UART_FILEBRIDGE_P4_LDO_ENABLE
+            bool "Enable on-chip LDO for SD card power (ESP32-P4)"
+            default y
+            help
+                ESP32-P4 requires an on-chip LDO to power the SD card slot.
+                Disable only if using an external SD power circuit.
+
+        config UART_FILEBRIDGE_P4_LDO_CHAN
+            int "LDO channel ID for SD power"
+            default 4
+            depends on UART_FILEBRIDGE_P4_LDO_ENABLE
+            help
+                LDO channel connected to the SD card VDD pin.
+                Channel 4 is correct for the Waveshare ESP32-P4-WIFI6 board.
+
+    endmenu
+
+endmenu

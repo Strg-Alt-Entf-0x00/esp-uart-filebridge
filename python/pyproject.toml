@@ -1,0 +1,16 @@
+﻿[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "esp-uart-filebridge"
+version = "1.0.0"
+description = "Host-side Python tools for esp-uart-filebridge IDF component"
+requires-python = ">=3.8"
+dependencies = ["pyserial>=3.5"]
+
+[project.scripts]
+esp-file-bridge = "esp_uart_filebridge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
