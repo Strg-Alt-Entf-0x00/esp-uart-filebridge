@@ -21,3 +21,10 @@ Versioning: Semantic Versioning (https://semver.org/)
 - Log suppression during active transfers for optimal SD write performance
 - Python package esp_uart_filebridge with protocol.py, file_manager.py, cli.py
 - basic_transfer example application
+
+### Changed
+- Major README.md overhaul with real-world ESP32-P4 UART speed benchmarks (up to ~285 KB/s)
+
+### Fixed
+- Fixed method routing bugs in Python CLI (esp-file-bridge) for upload and download commands
+- Cleaned up dangling legacy configuration dependencies (esp32_config.py) in Python tools

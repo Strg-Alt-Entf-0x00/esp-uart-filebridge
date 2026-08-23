@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 
 
 class ESP32FileManager:
-    def __init__(self, port=None, baud=None):
+    def __init__(self, proto):
         """Initialize file manager with config.ini values or override parameters."""
-        config = get_config()
-        self.port = port or config.file_port
-        self.baud = baud or config.file_baud
-        self.proto = ESP32Protocol()
+
+
+
+        self.proto = proto
         
     def connect(self):
         """Connect to ESP32 with retries."""
@@ -110,7 +110,7 @@ class ESP32FileManager:
         """Upload all files to ESP32 from multiple sources."""
         
         from esp32_config import get_config
-        config = get_config()
+
         
         # Models from frvd_models
         models_dir = config.frvd_models_dir
@@ -375,7 +375,7 @@ class ESP32FileManager:
         
         return all_valid
     
-    def download_file(self, remote_path, local_path=None):
+    def download_file(self, remote_path, local_path=None, progress_callback=None):
         """Download file from ESP32 to local system."""
         if local_path is None:
             local_path = Path(remote_path).name
@@ -383,6 +383,8 @@ class ESP32FileManager:
         logger.info(f"Downloading {remote_path}...")
         try:
             data = self.proto.read_file(remote_path)
+            if progress_callback:
+                progress_callback(len(data), len(data))
             
             with open(local_path, 'wb') as f:
                 f.write(data)
@@ -394,6 +396,23 @@ class ESP32FileManager:
             logger.error(f"[FAIL] Failed: {e}")
             return False
     
+
+    def upload_file(self, local_path, remote_path, progress_callback=None):
+        import os
+        size = os.path.getsize(local_path)
+        self.proto.begin_write_stream(remote_path, size)
+        sent = 0
+        with open(local_path, 'rb') as f:
+            while True:
+                chunk = f.read(8192)
+                if not chunk:
+                    break
+                self.proto.write_stream_data(chunk)
+                sent += len(chunk)
+                if progress_callback:
+                    progress_callback(sent, size)
+        self.proto.end_write_stream()
+        return True
     def delete_file(self, remote_path):
         """Delete file from ESP32."""
         logger.info(f"Deleting {remote_path}...")

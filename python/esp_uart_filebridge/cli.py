@@ -73,11 +73,12 @@ def main():
 
     proto = None
     try:
-        proto = ESP32Protocol(args.port, args.baud)
-        proto.connect()
+        proto = ESP32Protocol()
+        manager = ESP32FileManager(proto)
+        proto.connect(args.port, args.baud)
 
         if args.command == "info":
-            info = proto.get_device_info()
+            info = manager.get_device_info()
             print(f"Device     : {info.get('device_name', 'unknown')}")
             print(f"FW Version : {info.get('fw_major', 0)}.{info.get('fw_minor', 0)}.{info.get('fw_patch', 0)}")
             print(f"SD Present : {'yes' if info.get('sd_present') else 'no'}")
@@ -88,7 +89,7 @@ def main():
             print(f"Chunk Size : {info.get('optimal_chunk_size', 0)} bytes")
 
         elif args.command == "ls":
-            entries = proto.list_directory(args.path)
+            entries = manager.list_directory(args.path)
             for e in sorted(entries, key=lambda x: (not x.get("is_dir"), x.get("name", ""))):
                 name = e.get("name", "?")
                 size = e.get("size", 0)
@@ -98,7 +99,7 @@ def main():
         elif args.command == "upload":
             file_size = os.path.getsize(args.local)
             print(f"Uploading {args.local} -> {args.remote} ({file_size:,} bytes)")
-            proto.upload_file(args.local, args.remote,
+            manager.upload_file(args.local, args.remote,
                               progress_callback=lambda sent, total:
                               print(f"\r  {sent*100//total:3d}% {sent:,}/{total:,} bytes", end="", flush=True))
             print(f"\n[OK] Upload complete")
@@ -107,7 +108,7 @@ def main():
                 import binascii
                 with open(args.local, 'rb') as f:
                     local_crc = binascii.crc32(f.read())
-                remote_crc = proto.get_file_hash(args.remote)
+                remote_crc = manager.get_file_hash(args.remote)
                 if local_crc == remote_crc:
                     print(f"[OK] CRC32 Match: {local_crc:08X}")
                 else:
@@ -130,28 +131,28 @@ def main():
                     remote_parent = "/".join(remote_path.split('/')[:-1])
                     
                     try:
-                        proto.mkdir(remote_parent)
+                        manager.create_directory(remote_parent)
                     except ESP32ProtocolError:
                         pass # probably exists
                         
                     file_size = os.path.getsize(path)
                     print(f"  -> {remote_path} ({file_size:,} bytes)")
-                    proto.upload_file(str(path), remote_path)
+                    manager.upload_file(str(path), remote_path)
             print("[OK] Directory upload complete")
 
         elif args.command == "download":
             print(f"Downloading {args.remote} -> {args.local}")
-            proto.download_file(args.remote, args.local,
+            manager.download_file(args.remote, args.local,
                                 progress_callback=lambda sent, total:
                                 print(f"\r  {sent*100//total:3d}% {sent:,}/{total:,} bytes", end="", flush=True))
             print(f"\n[OK] Download complete")
 
         elif args.command == "delete":
-            proto.delete_file(args.path)
+            manager.delete_file(args.path)
             print(f"[OK] Deleted: {args.path}")
 
         elif args.command == "mkdir":
-            proto.create_directory(args.path)
+            manager.create_directory(args.path)
             print(f"[OK] Created: {args.path}")
 
         elif args.command == "format":
@@ -161,7 +162,7 @@ def main():
                     print("Aborted.")
                     sys.exit(0)
             print("Formatting SD card...")
-            proto.format_fs()
+            manager.format_fs()
             print("[OK] Format complete")
 
         elif args.command == "speed":
@@ -173,7 +174,7 @@ def main():
                 tmp = f.name
             try:
                 t0 = time.time()
-                proto.upload_file(tmp, "/dev/null")
+                manager.upload_file(tmp, "/dev/null")
                 elapsed = time.time() - t0
                 rate_kbs = (size_mb * 1024) / elapsed
                 print(f"[OK] {size_mb} MB in {elapsed:.2f}s = {rate_kbs:.0f} KB/s")
@@ -188,7 +189,7 @@ def main():
         sys.exit(0)
     finally:
         if proto:
-            proto.close()
+            proto.disconnect()
 
 if __name__ == "__main__":
     main()
