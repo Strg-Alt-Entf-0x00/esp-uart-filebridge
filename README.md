@@ -28,9 +28,8 @@ Add to your project's `main/idf_component.yml`:
 
 ```yaml
 dependencies:
-  ghost/esp-uart-filebridge:
+  Strg-Alt-Entf-0x00/esp-uart-filebridge:
     git: https://github.com/Strg-Alt-Entf-0x00/esp-uart-filebridge.git
-    version: ">=1.0.0"
 ```
 
 Then run: `idf.py update-dependencies`
@@ -62,9 +61,9 @@ ESP_ERROR_CHECK(esp_uart_filebridge_init(&cfg));
 
 ```bash
 pip install -e ./python
-python -m esp_uart_filebridge upload model.frvd /sd/models/ --port COM4
-python -m esp_uart_filebridge ls /sd/ --port COM4
-python -m esp_uart_filebridge download /sd/log.txt ./log.txt --port COM4
+esp-file-bridge upload model.frvd /sd/models/ --port COM4
+esp-file-bridge ls /sd/ --port COM4
+esp-file-bridge download /sd/log.txt ./log.txt --port COM4
 ```
 
 ## Protocol
@@ -110,4 +109,5 @@ Tested on ESP32-P4 @ 360 MHz with FT232R @ 3 Mbit/s + RTS/CTS:
 ## License
 
 MIT - see LICENSE file.
+
 
