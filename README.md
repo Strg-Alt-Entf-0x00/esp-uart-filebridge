@@ -36,6 +36,32 @@ Tested on an ESP32-P4 (360 MHz) writing to a standard SD Card, using an FT232R a
 
 ---
 
+## Repository Structure
+
+```
+esp-uart-filebridge/
+├── components/
+│   └── esp_uart_filebridge/      # The ESP-IDF component
+│       ├── include/               # Public API headers
+│       ├── src/                   # Implementation
+│       ├── CMakeLists.txt
+│       ├── idf_component.yml
+│       ├── Kconfig
+│       └── README.md
+├── examples/
+│   └── basic_transfer/            # Complete working example
+│       ├── main/
+│       ├── CMakeLists.txt
+│       └── sdkconfig.defaults
+├── python/                        # Python CLI and WebDAV tools
+│   ├── esp_uart_filebridge/
+│   ├── pyproject.toml
+│   └── test_all.py
+└── README.md                      # This file
+```
+
+---
+
 ## Features
 
 - **Binary protocol** with CRC32 integrity verification and sequence numbering.
@@ -52,7 +78,7 @@ Tested on an ESP32-P4 (360 MHz) writing to a standard SD Card, using an FT232R a
 ## Hardware Requirements
 
 - ESP32 with UART peripheral (any variant).
-- USB-UART adapter (recommended, tested @ 3 Mbit/s + HW Flow Control).
+- USB-UART adapter (recommended: FT232R, tested @ 3 Mbit/s + HW Flow Control).
   - *Compatible with: FT232R, CH343P, CP2102N, or any USB-UART chip supporting >= 3 Mbit/s + RTS/CTS.*
 - SD card formatted as FAT32 or exFAT.
 
@@ -60,7 +86,7 @@ Tested on an ESP32-P4 (360 MHz) writing to a standard SD Card, using an FT232R a
 
 ## Quick Start
 
-### 1. Add to your project
+### 1. Add Component to Your Project
 
 Add the component to your project's `main/idf_component.yml`:
 
@@ -72,9 +98,9 @@ dependencies:
 
 Then run: `idf.py update-dependencies`
 
-*(For local development, you can use `path: "../esp-uart-filebridge"` instead of `git`)*
+*(For local development, you can use `path: "../esp-uart-filebridge/components/esp_uart_filebridge"` instead of `git`)*
 
-### 2. Initialize in your firmware
+### 2. Initialize in Your Firmware
 
 ```c
 #include "esp_uart_filebridge.h"
@@ -94,7 +120,14 @@ cfg.baud_rate = 3000000;
 ESP_ERROR_CHECK(esp_uart_filebridge_init(&cfg));
 ```
 
-### 3. Install Python Tools
+### 3. Try the Example
+
+```bash
+cd examples/basic_transfer
+idf.py build flash monitor
+```
+
+### 4. Install Python Tools
 
 Install the companion Python package:
 ```bash
@@ -105,7 +138,7 @@ pip install -e ./python
 pip install -e "./python[webdav]"
 ```
 
-### 4. Choose Your Interface
+### 5. Choose Your Interface
 
 **Option A: Command-Line Interface (Fast & Scriptable)**
 ```bash
