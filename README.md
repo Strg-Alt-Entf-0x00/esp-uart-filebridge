@@ -45,6 +45,7 @@ Tested on an ESP32-P4 (360 MHz) writing to a standard SD Card, using an FT232R a
 - **Benchmark mode** (/dev/null) for pure UART throughput measurement.
 - **Multi-target:** ESP32, ESP32-S3, ESP32-C6, ESP32-P4 (P4 LDO power control via Kconfig).
 - **Python CLI Tool** included out of the box.
+- **WebDAV Server** (optional) - Mount ESP32 as network drive for drag-and-drop file management.
 
 ---
 
@@ -93,14 +94,20 @@ cfg.baud_rate = 3000000;
 ESP_ERROR_CHECK(esp_uart_filebridge_init(&cfg));
 ```
 
-### 3. Use the Python CLI
+### 3. Install Python Tools
 
 Install the companion Python package:
 ```bash
+# Basic installation (CLI only)
 pip install -e ./python
+
+# With WebDAV server support (optional)
+pip install -e "./python[webdav]"
 ```
 
-Manage your files directly from the command line:
+### 4. Choose Your Interface
+
+**Option A: Command-Line Interface (Fast & Scriptable)**
 ```bash
 # Upload a file
 esp-file-bridge --port COM13 upload model.frvd /sd/models/
@@ -110,7 +117,22 @@ esp-file-bridge --port COM13 ls /sd/
 
 # Download a file
 esp-file-bridge --port COM13 download /sd/log.txt ./log.txt
+
+# Upload entire directory
+esp-file-bridge --port COM13 upload_dir ./models /sd/models/
 ```
+
+**Option B: WebDAV Server (Drag & Drop in Explorer)** *(requires `[webdav]` extras)*
+```bash
+# Start WebDAV server
+esp-file-bridge --port COM13 webdav
+
+# Windows: Opens as Z: drive automatically
+# Linux/Mac: Follow on-screen mount instructions
+# All: Access via web browser at http://localhost:8080
+```
+
+The ESP32 SD card will appear as a network drive - drag and drop files like a USB stick!
 
 ---
 
@@ -144,6 +166,84 @@ The underlying binary protocol is designed for minimal overhead while guaranteei
 
 - **Frame size:** 9 byte header + payload (max 32 KB) + 4 byte CRC32.
 - **Chunk size:** Defaults to 8 KB to perfectly align with optimal SD card sector writes.
+
+---
+
+## WebDAV Server (Optional Feature)
+
+The WebDAV server provides a user-friendly way to access the ESP32 filesystem through native OS file explorers.
+
+### Installation
+
+```bash
+pip install -e "./python[webdav]"
+```
+
+This installs additional dependencies: `wsgidav`, `cheroot`, `pystray` (Windows), `pillow`
+
+### Usage
+
+```bash
+esp-file-bridge --port COM13 webdav
+```
+
+**What happens:**
+- Starts HTTP WebDAV server on `http://localhost:8080`
+- **Windows:** Auto-mounts as network drive (Z:) + system tray icon
+- **Linux:** Instructions for `davfs2` or file manager mounting
+- **macOS:** Instructions for Finder mounting
+- **All platforms:** Web browser interface at `http://localhost:8080`
+
+### Platform-Specific Mounting
+
+**Windows:**
+```cmd
+# Automatic (default)
+esp-file-bridge --port COM13 webdav
+
+# Manual mount
+net use Z: http://localhost:8080
+# Or in Explorer: \\localhost@8080\DavWWWRoot
+```
+
+**Linux:**
+```bash
+# Using davfs2
+sudo mount -t davfs http://localhost:8080 /mnt/esp32
+
+# Using file manager (Nautilus/Dolphin)
+# Connect to Server → dav://localhost:8080
+```
+
+**macOS:**
+```bash
+# Finder → Go → Connect to Server (Cmd+K)
+# Enter: http://localhost:8080
+```
+
+### WebDAV Options
+
+```bash
+esp-file-bridge --port COM13 webdav \
+  --host 127.0.0.1 \           # Server bind address
+  --webdav-port 8080 \         # HTTP port
+  --no-systray \               # Disable system tray (Windows)
+  --no-mount \                 # Disable auto-mount (Windows)
+  --drive Y:                   # Custom drive letter (Windows)
+```
+
+### When to Use WebDAV vs CLI
+
+| Use Case | Recommended Tool |
+|----------|------------------|
+| Automation, CI/CD, scripts | **CLI** (faster, scriptable) |
+| Manual file management | **WebDAV** (drag & drop) |
+| Large batch uploads | **CLI** (progress tracking) |
+| Quick edits, browsing | **WebDAV** (visual) |
+| Embedded in applications | **CLI** (Python API) |
+| End-user deployment | **WebDAV** (user-friendly) |
+
+---
 
 ## License
 

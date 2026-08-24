@@ -6,3 +6,13 @@ __pycache__/
 *.egg-info/
 dist/
 .venv/
+# Temporary documentation folder (only for development)
+.docs/
+
+# IDE/Editor specific files
+.clangd
+.vscode/
+
+# ESP-IDF generated configuration
+sdkconfig
+sdkconfig.old

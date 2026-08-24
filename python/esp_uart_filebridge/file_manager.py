@@ -76,30 +76,51 @@ class ESP32FileManager:
         
         return info
     
-    def list_directory(self, path='/sd'):
-        """List directory contents."""
-        logger.info(f"\nListing {path}...")
+    def list_directory(self, path='/sd', quiet=False):
+        """
+        List directory contents.
+        
+        Args:
+            path: Directory path to list
+            quiet: If True, suppress verbose logging (for WebDAV operations)
+        """
+        if not quiet:
+            logger.info(f"\nListing {path}...")
+        else:
+            logger.debug(f"Listing {path}")
+        
+        # Special case: root "/" is not supported by firmware
+        # Return empty list for WebDAV compatibility
+        if path == "/" or path == "":
+            logger.debug("Root directory listing requested - returning empty (not supported by firmware)")
+            return []
         
         try:
             entries = self.proto.list_directory(path)
             
             if not entries:
-                logger.info("  (empty)")
+                if not quiet:
+                    logger.info("  (empty)")
                 return []
             
-            # Separate directories and files
-            dirs = [e for e in entries if e.is_directory]
-            files = [e for e in entries if not e.is_directory]
+            # Only show detailed listing in CLI mode (not WebDAV)
+            if not quiet:
+                # Separate directories and files
+                dirs = [e for e in entries if e.is_directory]
+                files = [e for e in entries if not e.is_directory]
+                
+                # Show directories first
+                for entry in sorted(dirs, key=lambda e: e.name):
+                    logger.info(f"  [DIR]  {entry.name}")
+                
+                # Show files with sizes
+                for entry in sorted(files, key=lambda e: e.name):
+                    logger.info(f"  {entry.size:>12,} bytes  {entry.name}")
+                
+                logger.info(f"\nTotal: {len(dirs)} directories, {len(files)} files")
+            else:
+                logger.debug(f"Listed {len(entries)} entries in {path}")
             
-            # Show directories first
-            for entry in sorted(dirs, key=lambda e: e.name):
-                logger.info(f"  [DIR]  {entry.name}")
-            
-            # Show files with sizes
-            for entry in sorted(files, key=lambda e: e.name):
-                logger.info(f"  {entry.size:>12,} bytes  {entry.name}")
-            
-            logger.info(f"\nTotal: {len(dirs)} directories, {len(files)} files")
             return entries
             
         except ESP32ProtocolError as e:
@@ -419,6 +440,144 @@ class ESP32FileManager:
         try:
             self.proto.delete_file(remote_path)
             logger.info(f"[OK] Deleted")
+            return True
+        except Exception as e:
+            # Check if file not found (NACK: 18 = ERR_FILE_NOT_FOUND) - OK after MOVE
+            error_str = str(e)
+            if "NACK" in error_str and "18" in error_str:
+                # File already moved/deleted - this is fine
+                logger.debug(f"File not found (may have been moved): {remote_path}")
+                return True  # Silent success, no error log
+            
+            # Real error - log and return False
+            logger.error(f"[FAIL] Failed: {e}")
+            return False
+    
+    def create_directory(self, remote_path, quiet=False):
+        """
+        Create directory on ESP32.
+        
+        Args:
+            remote_path: Directory path to create
+            quiet: If True, suppress verbose logging
+        """
+        if not quiet:
+            logger.info(f"Creating directory {remote_path}...")
+        else:
+            logger.debug(f"Creating directory {remote_path}")
+        
+        try:
+            self.proto.mkdir(remote_path)
+            if not quiet:
+                logger.info(f"[OK] Created")
+            else:
+                logger.debug(f"Created {remote_path}")
+            return True
+        except Exception as e:
+            # Check if directory already exists (NACK typically means "already exists")
+            error_msg = str(e).lower()
+            if "nack" in error_msg:
+                if not quiet:
+                    logger.debug(f"Directory {remote_path} already exists")
+                # Not an error if directory exists
+                return True
+            
+            logger.error(f"[FAIL] Failed: {e}")
+            return False
+    
+    def upload_file_from_bytes(self, data, remote_path, quiet=False):
+        """
+        Upload file data (bytes) to ESP32.
+        
+        Args:
+            data: File data as bytes
+            remote_path: Remote path on ESP32
+            quiet: If True, suppress verbose logging (for WebDAV operations)
+        """
+        if not quiet:
+            logger.info(f"Uploading {len(data):,} bytes to {remote_path}...")
+        else:
+            logger.debug(f"Uploading {len(data):,} bytes to {remote_path}")
+        
+        try:
+            self.proto.begin_write_stream(remote_path, len(data))
+            # Send in chunks
+            chunk_size = 8192
+            offset = 0
+            while offset < len(data):
+                chunk = data[offset:offset + chunk_size]
+                self.proto.write_stream_data(chunk)
+                offset += len(chunk)
+            self.proto.end_write_stream()
+            
+            if not quiet:
+                logger.info(f"[OK] Upload complete")
+            else:
+                logger.debug(f"Upload complete: {remote_path}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"[FAIL] Failed to upload {remote_path}: {e}")
+            raise
+    
+    def download_file_to_bytes(self, remote_path, quiet=False):
+        """
+        Download file from ESP32 and return as bytes.
+        
+        Args:
+            remote_path: Remote path on ESP32
+            quiet: If True, suppress verbose logging (for WebDAV operations)
+        """
+        if not quiet:
+            logger.info(f"Downloading {remote_path}...")
+        else:
+            logger.debug(f"Downloading {remote_path}")
+        
+        try:
+            data = self.proto.read_file(remote_path)
+            
+            if not quiet:
+                logger.info(f"[OK] Downloaded {len(data):,} bytes")
+            else:
+                logger.debug(f"Downloaded {len(data):,} bytes from {remote_path}")
+            
+            return data
+        except Exception as e:
+            logger.error(f"[FAIL] Failed to download {remote_path}: {e}")
+            raise
+    
+    def get_file_hash(self, remote_path):
+        """Get CRC32 hash of remote file."""
+        return self.proto.get_file_hash(remote_path)
+    
+    def format_fs(self):
+        """Format filesystem (SD card)."""
+        logger.warning("Formatting filesystem...")
+        try:
+            self.proto.format_fs()
+            logger.info("[OK] Format complete")
+            return True
+        except Exception as e:
+            logger.error(f"[FAIL] Failed: {e}")
+            return False
+    
+    def rename_file(self, old_path, new_path):
+        """Rename or move file/directory."""
+        logger.info(f"Renaming {old_path} -> {new_path}...")
+        try:
+            self.proto.rename(old_path, new_path)
+            logger.info("[OK] Renamed")
+            return True
+        except Exception as e:
+            logger.error(f"[FAIL] Failed: {e}")
+            return False
+    
+    def copy_file(self, src_path, dst_path):
+        """Copy file."""
+        logger.info(f"Copying {src_path} -> {dst_path}...")
+        try:
+            self.proto.copy_file(src_path, dst_path)
+            logger.info("[OK] Copied")
             return True
         except Exception as e:
             logger.error(f"[FAIL] Failed: {e}")

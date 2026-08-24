@@ -58,11 +58,26 @@ def main():
 
     mk_p = sub.add_parser("mkdir", help="Create directory on ESP32")
     mk_p.add_argument("path", help="Remote directory path to create")
+    
+    mv_p = sub.add_parser("rename", help="Rename or move file/directory on ESP32")
+    mv_p.add_argument("old_path", help="Current path")
+    mv_p.add_argument("new_path", help="New path")
+    
+    cp_p = sub.add_parser("copy", help="Copy file on ESP32")
+    cp_p.add_argument("src_path", help="Source file path")
+    cp_p.add_argument("dst_path", help="Destination file path")
 
     fmt_p = sub.add_parser("format", help="Format the SD card (WARNING: Destroys all data)")
     fmt_p.add_argument("--force", action="store_true", help="Do not prompt for confirmation")
 
     sub.add_parser("speed", help="Run upload speed benchmark (/dev/null)")
+    
+    webdav_p = sub.add_parser("webdav", help="Start WebDAV server (network drive)")
+    webdav_p.add_argument("--host", default="127.0.0.1", help="HTTP server host (default: 127.0.0.1)")
+    webdav_p.add_argument("--webdav-port", type=int, default=8080, help="HTTP server port (default: 8080)")
+    webdav_p.add_argument("--no-systray", action="store_true", help="Disable system tray icon (Windows)")
+    webdav_p.add_argument("--no-mount", action="store_true", help="Disable auto-mount (Windows)")
+    webdav_p.add_argument("--drive", help="Drive letter for Windows (e.g. Z:)")
 
     args = parser.parse_args()
 
@@ -154,6 +169,14 @@ def main():
         elif args.command == "mkdir":
             manager.create_directory(args.path)
             print(f"[OK] Created: {args.path}")
+        
+        elif args.command == "rename":
+            proto.rename(args.old_path, args.new_path)
+            print(f"[OK] Renamed: {args.old_path} -> {args.new_path}")
+        
+        elif args.command == "copy":
+            proto.copy_file(args.src_path, args.dst_path)
+            print(f"[OK] Copied: {args.src_path} -> {args.dst_path}")
 
         elif args.command == "format":
             if not args.force:
@@ -180,6 +203,36 @@ def main():
                 print(f"[OK] {size_mb} MB in {elapsed:.2f}s = {rate_kbs:.0f} KB/s")
             finally:
                 os.unlink(tmp)
+        
+        elif args.command == "webdav":
+            # WebDAV server requires additional dependencies
+            try:
+                from .webdav import is_available, start_webdav_server
+                
+                if not is_available():
+                    log.error("WebDAV dependencies not installed!")
+                    log.error("Install with: pip install esp-uart-filebridge[webdav]")
+                    sys.exit(1)
+                
+                # Close the protocol connection (WebDAV server will create its own)
+                proto.disconnect()
+                
+                # Start WebDAV server (blocking)
+                exit_code = start_webdav_server(
+                    port=args.port,
+                    baud=args.baud,
+                    host=args.host,
+                    webdav_port=args.webdav_port,
+                    systray=not args.no_systray,
+                    auto_mount=not args.no_mount,
+                    drive=args.drive
+                )
+                sys.exit(exit_code)
+            
+            except ImportError:
+                log.error("WebDAV module not found!")
+                log.error("Install with: pip install esp-uart-filebridge[webdav]")
+                sys.exit(1)
 
     except ESP32ProtocolError as e:
         log.error(f"Protocol error: {e}")

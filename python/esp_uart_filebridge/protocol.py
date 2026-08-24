@@ -434,3 +434,65 @@ class ESP32Protocol:
         success, err_code = self._wait_ack_with_error(timeout_sec=30.0)
         if not success:
             raise ESP32ProtocolError(f"NACK or Timeout on FORMAT_FS: {err_code}", error_code=err_code)
+    
+    @with_lock
+    def get_file_hash(self, path: str) -> int:
+        """Get CRC32 hash of file.
+        
+        Args:
+            path: File path on ESP32
+            
+        Returns:
+            CRC32 hash as 32-bit unsigned integer
+        """
+        path_bytes = path.encode('utf-8') + b'\0'
+        self._send_frame(CMD_HASH_FILE, path_bytes)
+        
+        # Receive response (firmware sends CMD_HASH_FILE back with hash in payload)
+        cmd, payload = self._receive_frame(timeout_sec=10.0)
+        
+        # Check for NACK
+        if cmd == CMD_NACK:
+            err_code = struct.unpack('<H', payload[:2])[0] if len(payload) >= 2 else 0
+            raise ESP32ProtocolError(f"NACK on HASH_FILE: {err_code}", error_code=err_code)
+        
+        # Firmware responds with CMD_HASH_FILE and CRC32 in payload
+        if cmd != CMD_HASH_FILE:
+            raise ESP32ProtocolError(f"Unexpected response to HASH_FILE: CMD={cmd:02X}")
+        
+        # Extract CRC32 from payload
+        if len(payload) < 4:
+            raise ESP32ProtocolError(f"HASH_FILE response too short: {len(payload)} bytes")
+        
+        crc32_value = struct.unpack('<I', payload[:4])[0]
+        return crc32_value
+    
+    @with_lock
+    def rename(self, old_path: str, new_path: str):
+        """Rename or move a file/directory.
+        
+        Args:
+            old_path: Current path
+            new_path: New path
+        """
+        old_bytes = old_path.encode('utf-8') + b'\0'
+        new_bytes = new_path.encode('utf-8') + b'\0'
+        payload = old_bytes + new_bytes
+        self._send_frame(CMD_RENAME, payload)
+        if not self._wait_ack():
+            raise ESP32ProtocolError("NACK on RENAME")
+    
+    @with_lock
+    def copy_file(self, src_path: str, dst_path: str):
+        """Copy a file.
+        
+        Args:
+            src_path: Source file path
+            dst_path: Destination file path
+        """
+        src_bytes = src_path.encode('utf-8') + b'\0'
+        dst_bytes = dst_path.encode('utf-8') + b'\0'
+        payload = src_bytes + dst_bytes
+        self._send_frame(CMD_COPY, payload)
+        if not self._wait_ack():
+            raise ESP32ProtocolError("NACK on COPY")

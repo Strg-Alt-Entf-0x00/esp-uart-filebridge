@@ -784,8 +784,10 @@ void FileProtocol::handle_delete(const uint8_t* payload, uint16_t length) {
     
     if (ret == ESP_OK) {
         send_ack();
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+        send_error(ERR_FILE_NOT_FOUND);  // Proper error code for file not found
     } else {
-        send_error(ERR_IO_ERROR);
+        send_error(ERR_IO_ERROR);  // Real I/O errors
     }
 }
 
