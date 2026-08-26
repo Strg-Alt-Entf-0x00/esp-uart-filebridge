@@ -9,7 +9,8 @@ dependencies:
 
 files:
   include:
-    - "components/esp_uart_filebridge/**/*"
+    - "include/**/*"
+    - "src/**/*"
     - "CMakeLists.txt"
     - "Kconfig"
     - "README.md"

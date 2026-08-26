@@ -56,14 +56,12 @@ This is a strong functional verification for the current firmware and host imple
 
 ```
 esp-uart-filebridge/
-├── components/
-│   └── esp_uart_filebridge/      # The ESP-IDF component
-│       ├── include/               # Public API headers
-│       ├── src/                   # Implementation
-│       ├── CMakeLists.txt
-│       ├── idf_component.yml
-│       ├── Kconfig
-│       └── README.md
+├── include/                       # Public API headers
+├── src/                           # Component implementation
+│   └── internal/                  # Private implementation headers
+├── CMakeLists.txt
+├── idf_component.yml
+├── Kconfig
 ├── examples/
 │   └── basic_transfer/            # Complete working example
 │       ├── main/
@@ -114,7 +112,7 @@ dependencies:
 
 Then run: `idf.py update-dependencies`
 
-*(For local development, you can use `path: "../esp-uart-filebridge/components/esp_uart_filebridge"` instead of `git`)*
+*(For local development, you can use `path: "../esp-uart-filebridge"` instead of `git`)*
 
 ### 2. Initialize in Your Firmware
 
