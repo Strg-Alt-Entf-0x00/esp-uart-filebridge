@@ -1,24 +1,23 @@
-# ESP32-P4 Target
+# ============================================================================
+# ESP32-P4 Hardware Target Configuration
+# ============================================================================
 CONFIG_IDF_TARGET="esp32p4"
-
-# ESP32-P4 Chip Revision Support
-# Support ALL revisions: v1.0, v1.1, v1.3, and v3.x
 CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
-CONFIG_ESP32P4_REV_MIN_0=y
-CONFIG_ESP32P4_REV_MIN_FULL=0
 
-# CPU Frequency (360 MHz for optimal performance)
-CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
-
-# Flash Configuration
+# ============================================================================
+# Flash Configuration (32 MB QIO Mode)
+# ============================================================================
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="32MB"
 
-# Partition Table - Increase offset for larger bootloader
+# ============================================================================
+# Partition Table (Increased offset for larger bootloader)
+# ============================================================================
 CONFIG_PARTITION_TABLE_OFFSET=0x9000
 
-# UART File Bridge Configuration (Kconfig defaults)
+# ============================================================================
+# UART File Bridge Component Configuration
+# ============================================================================
 CONFIG_UART_FILEBRIDGE_NUM=1
 CONFIG_UART_FILEBRIDGE_TX_PIN=30
 CONFIG_UART_FILEBRIDGE_RX_PIN=31
@@ -26,6 +25,8 @@ CONFIG_UART_FILEBRIDGE_RTS_PIN=50
 CONFIG_UART_FILEBRIDGE_CTS_PIN=29
 CONFIG_UART_FILEBRIDGE_BAUD=3000000
 
-# SD Card Configuration (for file storage)
+# ============================================================================
+# SD Card Configuration (For file storage)
+# ============================================================================
 CONFIG_UART_FILEBRIDGE_SD_MOUNT_POINT="/sd"
 CONFIG_UART_FILEBRIDGE_SD_MAX_FILES=5
