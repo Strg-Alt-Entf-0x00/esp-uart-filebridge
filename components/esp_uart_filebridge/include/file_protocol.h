@@ -127,6 +127,7 @@ private:
     char* m_sd_write_buffer = nullptr;  // Heap-allocated buffer for setvbuf()
     uint64_t m_transfer_bytes = 0;
     uint64_t m_transfer_total = 0;
+    bool m_transfer_failed = false;
     char m_transfer_path[256];
     bool m_benchmark_mode = false;
     

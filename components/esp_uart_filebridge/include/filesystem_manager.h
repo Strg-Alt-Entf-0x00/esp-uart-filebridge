@@ -93,6 +93,9 @@ public:
     /** Format SD card (WARNING: destroys all data). */
     esp_err_t format_sd();
 
+    /** Validate that a path stays inside the configured SD mount point. */
+    esp_err_t validate_path(const char* path);
+
 private:
     bool m_initialized  = false;
     bool m_sd_mounted   = false;
@@ -103,6 +106,5 @@ private:
     void*         m_sd_pwr_ctrl = nullptr;  // ESP32-P4 LDO handle (or nullptr)
 
     bool      is_sd_path(const char* path);
-    esp_err_t validate_path(const char* path);
     esp_err_t delete_directory_recursive(const char* path);
 };

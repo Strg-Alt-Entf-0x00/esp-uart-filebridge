@@ -175,7 +175,7 @@ esp_err_t FilesystemManager::get_space_info(const char *path,
 esp_err_t FilesystemManager::list_directory(const char *path,
                                              void (*callback)(const char*, uint64_t, bool, uint32_t, void*),
                                              void *user_data) {
-    if (!path || !callback) return ESP_ERR_INVALID_ARG;
+    if (!callback || validate_path(path) != ESP_OK) return ESP_ERR_INVALID_ARG;
 
     DIR *dir = opendir(path);
     if (!dir) {
@@ -200,7 +200,7 @@ esp_err_t FilesystemManager::list_directory(const char *path,
 
 esp_err_t FilesystemManager::stat_file(const char *path, uint64_t *size,
                                         uint32_t *timestamp, bool *is_dir) {
-    if (!path) return ESP_ERR_INVALID_ARG;
+    if (validate_path(path) != ESP_OK) return ESP_ERR_INVALID_ARG;
 
     struct stat st;
     if (stat(path, &st) != 0) return ESP_ERR_NOT_FOUND;
@@ -212,7 +212,7 @@ esp_err_t FilesystemManager::stat_file(const char *path, uint64_t *size,
 }
 
 esp_err_t FilesystemManager::delete_file(const char *path) {
-    if (!path) return ESP_ERR_INVALID_ARG;
+    if (validate_path(path) != ESP_OK || strcmp(path, m_mount_point) == 0) return ESP_ERR_INVALID_ARG;
 
     struct stat st;
     if (stat(path, &st) != 0) return ESP_ERR_NOT_FOUND;
@@ -256,17 +256,19 @@ esp_err_t FilesystemManager::delete_directory_recursive(const char *path) {
 }
 
 esp_err_t FilesystemManager::rename_file(const char *old_path, const char *new_path) {
-    if (!old_path || !new_path) return ESP_ERR_INVALID_ARG;
+    if (validate_path(old_path) != ESP_OK || validate_path(new_path) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    if (strcmp(old_path, m_mount_point) == 0 || strcmp(new_path, m_mount_point) == 0) return ESP_ERR_INVALID_ARG;
     return (rename(old_path, new_path) == 0) ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t FilesystemManager::create_directory(const char *path) {
-    if (!path) return ESP_ERR_INVALID_ARG;
+    if (validate_path(path) != ESP_OK || strcmp(path, m_mount_point) == 0) return ESP_ERR_INVALID_ARG;
     return (mkdir(path, 0755) == 0) ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t FilesystemManager::copy_file(const char *src_path, const char *dst_path) {
-    if (!src_path || !dst_path) return ESP_ERR_INVALID_ARG;
+    if (validate_path(src_path) != ESP_OK || validate_path(dst_path) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    if (strcmp(src_path, m_mount_point) == 0 || strcmp(dst_path, m_mount_point) == 0) return ESP_ERR_INVALID_ARG;
 
     FILE *src = fopen(src_path, "rb");
     if (!src) return ESP_ERR_NOT_FOUND;
@@ -292,7 +294,7 @@ esp_err_t FilesystemManager::copy_file(const char *src_path, const char *dst_pat
 }
 
 esp_err_t FilesystemManager::hash_file(const char *path, uint32_t *hash) {
-    if (!path || !hash) return ESP_ERR_INVALID_ARG;
+    if (validate_path(path) != ESP_OK || !hash) return ESP_ERR_INVALID_ARG;
 
     FILE *f = fopen(path, "rb");
     if (!f) return ESP_ERR_NOT_FOUND;
@@ -333,12 +335,24 @@ esp_err_t FilesystemManager::format_sd() {
 }
 
 bool FilesystemManager::is_sd_path(const char *path) {
-    return strncmp(path, m_mount_point, strlen(m_mount_point)) == 0;
+    const size_t mount_length = strlen(m_mount_point);
+    return path && (strcmp(path, m_mount_point) == 0 ||
+                    (strncmp(path, m_mount_point, mount_length) == 0 &&
+                     path[mount_length] == '/'));
 }
 
 esp_err_t FilesystemManager::validate_path(const char *path) {
-    if (!path || strlen(path) == 0) return ESP_ERR_INVALID_ARG;
+    if (!path || strlen(path) == 0 || path[0] != '\\') return ESP_ERR_INVALID_ARG;
     if (!is_sd_path(path))         return ESP_ERR_INVALID_ARG;
+    const char *segment = path;
+    while ((segment = strstr(segment, "..")) != nullptr) {
+        const char before = segment == path ? '/' : segment[-1];
+        const char after = segment[2];
+        if ((before == '/' || before == '\\') && (after == '/' || after == '\\' || after == '\0')) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        segment += 2;
+    }
     return ESP_OK;
 }
 

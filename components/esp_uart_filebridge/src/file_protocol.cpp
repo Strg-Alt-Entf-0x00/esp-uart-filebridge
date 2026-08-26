@@ -176,6 +176,18 @@ void FileProtocol::try_parse_frame() {
     
     // Parse header
     const ProtocolHeader* header = reinterpret_cast<const ProtocolHeader*>(m_rx_buffer);
+
+    if (header->version != ((PROTO_VERSION_MAJOR << 4) | PROTO_VERSION_MINOR)) {
+        reset_rx_buffer();
+        send_error(ERR_INVALID_VERSION);
+        return;
+    }
+
+    if (header->length > PROTO_MAX_PAYLOAD) {
+        reset_rx_buffer();
+        send_error(ERR_PAYLOAD_TOO_LARGE);
+        return;
+    }
     
     // Check if we have complete frame
     size_t frame_len = PROTO_HEADER_SIZE + header->length + PROTO_CRC_SIZE;
@@ -309,6 +321,7 @@ void FileProtocol::abort_active_transfer() {
     m_transfer_active = false;
     m_transfer_bytes = 0;
     m_transfer_total = 0;
+    m_transfer_failed = false;
 }
 
 // ============================================================================
@@ -602,9 +615,16 @@ void FileProtocol::handle_put_file_begin(const uint8_t* payload, uint16_t length
     // Payload format: [file_size:8 bytes][path:string]
     const uint64_t* size_ptr = reinterpret_cast<const uint64_t*>(payload);
     const char* path = reinterpret_cast<const char*>(payload + sizeof(uint64_t));
+    const size_t path_capacity = length - sizeof(uint64_t);
+    const size_t path_length = strnlen(path, path_capacity);
+    if (path_length == path_capacity || path_length >= sizeof(m_transfer_path)) {
+        send_error(ERR_INVALID_PATH);
+        return;
+    }
     
     m_transfer_total = *size_ptr;
-    strncpy(m_transfer_path, path, sizeof(m_transfer_path) - 1);
+    memcpy(m_transfer_path, path, path_length);
+    m_transfer_path[path_length] = '\0';
     
     ESP_LOGI(TAG, "PUT_FILE_BEGIN: %s (%llu bytes)", m_transfer_path, m_transfer_total);
     
@@ -618,6 +638,11 @@ void FileProtocol::handle_put_file_begin(const uint8_t* payload, uint16_t length
         return;
     }
     m_benchmark_mode = false;
+
+    if (m_fs_manager->validate_path(m_transfer_path) != ESP_OK) {
+        send_error(ERR_INVALID_PATH);
+        return;
+    }
     
     // Check if enough space is available
     // Extract mount point from path ("/sd/..." or "/flash/...")
@@ -672,6 +697,7 @@ void FileProtocol::handle_put_file_begin(const uint8_t* payload, uint16_t length
     
     m_transfer_active = true;
     m_transfer_bytes = 0;
+    m_transfer_failed = false;
     
     // Suppress logs during transfer for optimal performance
     suppress_logs_if_needed();
@@ -691,6 +717,17 @@ void FileProtocol::handle_put_file_data(const uint8_t* payload, uint16_t length)
     }
     
     if (!payload || length == 0) {
+        return;
+    }
+
+    if (m_transfer_bytes > m_transfer_total ||
+        static_cast<uint64_t>(length) > m_transfer_total - m_transfer_bytes) {
+        ESP_LOGE(TAG, "Upload exceeds declared size: received=%llu, chunk=%u, total=%llu",
+                 m_transfer_bytes, length, m_transfer_total);
+        m_transfer_failed = true;
+        unlink(m_transfer_path);
+        abort_active_transfer();
+        send_error(ERR_IO_ERROR);
         return;
     }
     
@@ -732,6 +769,15 @@ void FileProtocol::handle_put_file_end() {
         return;
     }
     
+    if (m_transfer_failed || m_transfer_bytes != m_transfer_total) {
+        ESP_LOGE(TAG, "Upload size mismatch: received=%llu, expected=%llu",
+                 m_transfer_bytes, m_transfer_total);
+        unlink(m_transfer_path);
+        abort_active_transfer();
+        send_error(ERR_IO_ERROR);
+        return;
+    }
+
     // Restore logs before logging final message
     restore_logs_if_needed();
     
