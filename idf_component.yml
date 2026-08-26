@@ -1,0 +1,14 @@
+## IDF Component Manager Manifest File
+## This file makes the repository usable as a managed component
+## while preserving the python/ tools and examples/ structure
+
+version: "1.0.0"
+description: "Universal ESP32 UART File Bridge - Binary protocol for reliable file transfer over UART/FT232R (includes Python CLI tools)"
+url: "https://github.com/Strg-Alt-Entf-0x00/esp-uart-filebridge"
+license: "MIT"
+
+dependencies:
+  idf: ">=5.2.0"
+
+# Tell the component manager that this is a "wrapper" component
+# The actual component sources are in components/esp_uart_filebridge/
