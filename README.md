@@ -4,17 +4,17 @@ Universal ESP32 UART File Bridge - A highly optimized IDF Component for reliable
 
 ## Why does this exist? (The Honest Truth)
 
-In the ESP32 ecosystem, transferring large files (like AI models or audio datasets) to an SD card usually involves WiFi (can be slow, requires network stack, drops packets) or WebUSB/Native USB (complex, requires specific pins, driver issues). 
+In the ESP32 ecosystem, transferring large files and directory trees to an SD card usually involves WiFi (which can be slow or unreliable) or WebUSB/Native USB (which adds hardware and driver complexity).
 
-We built **esp-uart-filebridge** because we needed an **industrial-grade, bulletproof, and deterministic** way to flash 10MB+ AI models onto the ESP32-P4 without relying on network stacks or unstable USB-OTG drivers. 
+We built **esp-uart-filebridge** to provide a deterministic way to transfer arbitrary files and directory trees to an ESP32 filesystem without relying on a network stack.
 
 UART is an ancient protocol, but when implemented correctly, it is **rock solid**. By using a high-quality USB-UART adapter (like the FT232R) with Hardware Flow Control (RTS/CTS) pushed to **3,000,000 Baud**, we achieved stable speeds that rival basic WiFi setups—without any of the software overhead.
 
 ### Pros:
-- **Bulletproof Reliability:** Hardware flow control (RTS/CTS) guarantees zero dropped packets even under heavy CPU load.
+- **Reliable transfers:** CRC32, strict upload-size validation and hardware flow control (RTS/CTS) detect transfer errors.
 - **Zero Network Overhead:** No WiFi, no IP stacks, no router needed. Pure serial communication.
 - **Highly Performant for UART:** We push standard UART to its absolute limits, achieving near-theoretical maximum throughput.
-- **Universal:** Works on *any* ESP32 variant with *any* standard SD card setup.
+- **Configurable:** Supports the ESP32 targets and storage arrangements supported by the selected ESP-IDF configuration.
 
 ### Cons:
 - **Hardware Requirement:** You must wire up an external USB-UART adapter with 4 pins (TX, RX, RTS, CTS). A simple 2-pin TX/RX connection will drop packets at these speeds.
@@ -28,11 +28,11 @@ Tested on an ESP32-P4 (360 MHz) writing to a standard SD Card, using an FT232R a
 
 | Scenario | File Size | Upload (PC -> SD) | Download (SD -> PC) |
 |---|---|---|---|
-| **Small File** (Overhead Test) | 1 KB | ~1.02s | ~0.91s |
-| **Large File** (Throughput Test) | 1 MB | ~5.25s (**~235 KB/s**) | ~4.48s (**~285 KB/s**) |
-| **Raw UART Limit** (No SD write) | N/A | ~330 KB/s | ~330 KB/s |
+| **Small File** (Overhead Test) | 1 KB | ~0.22s | ~0.22s |
+| **Large File** (Throughput Test) | 1 MiB | ~4.5s (**~227 KiB/s**) | ~3.7s (**~278 KiB/s**) |
+| **Raw UART Limit** (No SD write) | 1 MB | ~4.4s (**~231 KiB/s**) | N/A |
 
-*Note: The ~800ms overhead on small files comes from the Python interpreter startup and the initial UART handshake sequence. The actual data transfer is near-instantaneous.*
+*Note: Results were measured on one ESP32-P4 setup at 3 Mbit/s with an FT232R and RTS/CTS. Performance depends on the adapter, wiring, UART configuration and SD card.*
 
 ---
 
@@ -68,10 +68,10 @@ esp-uart-filebridge/
 - **Full filesystem operations:** upload, download, list, delete, rename, mkdir, copy, hash.
 - **Streaming upload** (no per-chunk ACK) with Hardware Flow Control (RTS/CTS) for maximum throughput.
 - **Log suppression** during transfers for optimal SD card write performance.
-- **Benchmark mode** (/dev/null) for pure UART throughput measurement.
+- **Optional WebDAV server** for convenient local file management.
 - **Multi-target:** ESP32, ESP32-S3, ESP32-C6, ESP32-P4 (P4 LDO power control via Kconfig).
 - **Python CLI Tool** included out of the box.
-- **WebDAV Server** (optional) - Mount ESP32 as network drive for drag-and-drop file management.
+- **WebDAV Server** (optional) - Mount ESP32 as a local network drive for drag-and-drop file management.
 
 ---
 
@@ -143,7 +143,7 @@ pip install -e "./python[webdav]"
 **Option A: Command-Line Interface (Fast & Scriptable)**
 ```bash
 # Upload a file
-esp-file-bridge --port COM13 upload model.frvd /sd/models/
+esp-file-bridge --port COM13 upload ./local_file.bin /sd/data/local_file.bin
 
 # List SD card contents
 esp-file-bridge --port COM13 ls /sd/
@@ -151,8 +151,8 @@ esp-file-bridge --port COM13 ls /sd/
 # Download a file
 esp-file-bridge --port COM13 download /sd/log.txt ./log.txt
 
-# Upload entire directory
-esp-file-bridge --port COM13 upload_dir ./models /sd/models/
+# Upload entire directory, preserving its tree
+esp-file-bridge --port COM13 upload_dir ./local_directory /sd/data/
 ```
 
 **Option B: WebDAV Server (Drag & Drop in Explorer)** *(requires `[webdav]` extras)*

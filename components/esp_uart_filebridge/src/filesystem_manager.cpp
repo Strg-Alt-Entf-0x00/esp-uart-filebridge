@@ -342,7 +342,7 @@ bool FilesystemManager::is_sd_path(const char *path) {
 }
 
 esp_err_t FilesystemManager::validate_path(const char *path) {
-    if (!path || strlen(path) == 0 || path[0] != '\\') return ESP_ERR_INVALID_ARG;
+    if (!path || strlen(path) == 0 || path[0] != '/') return ESP_ERR_INVALID_ARG;
     if (!is_sd_path(path))         return ESP_ERR_INVALID_ARG;
     const char *segment = path;
     while ((segment = strstr(segment, "..")) != nullptr) {
