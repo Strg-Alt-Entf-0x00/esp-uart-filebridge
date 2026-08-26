@@ -94,22 +94,20 @@ def main():
 
         if args.command == "info":
             info = manager.get_device_info()
-            print(f"Device     : {info.get('device_name', 'unknown')}")
-            print(f"FW Version : {info.get('fw_major', 0)}.{info.get('fw_minor', 0)}.{info.get('fw_patch', 0)}")
-            print(f"SD Present : {'yes' if info.get('sd_present') else 'no'}")
-            if info.get('sd_present'):
-                sd_mb = info.get('sd_size', 0) / (1024 * 1024)
-                free_mb = info.get('sd_free', 0) / (1024 * 1024)
+            print(f"Device     : {info.device_name}")
+            print(f"FW Version : {info.fw_version}")
+            print(f"SD Present : {'yes' if info.sd_present else 'no'}")
+            if info.sd_present:
+                sd_mb = info.sd_size / (1024 * 1024)
+                free_mb = info.sd_free / (1024 * 1024)
                 print(f"SD Size    : {sd_mb:.0f} MB (free: {free_mb:.0f} MB)")
-            print(f"Chunk Size : {info.get('optimal_chunk_size', 0)} bytes")
+            print(f"Chunk Size : {info.optimal_chunk_size} bytes")
 
         elif args.command == "ls":
             entries = manager.list_directory(args.path)
-            for e in sorted(entries, key=lambda x: (not x.get("is_dir"), x.get("name", ""))):
-                name = e.get("name", "?")
-                size = e.get("size", 0)
-                suffix = "/" if e.get("is_dir") else f"  ({size:,} bytes)"
-                print(f"  {name}{suffix}")
+            for entry in sorted(entries, key=lambda item: (not item.is_directory, item.name)):
+                suffix = "/" if entry.is_directory else f"  ({entry.size:,} bytes)"
+                print(f"  {entry.name}{suffix}")
 
         elif args.command == "upload":
             file_size = os.path.getsize(args.local)
