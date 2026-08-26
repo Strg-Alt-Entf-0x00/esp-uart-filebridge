@@ -43,6 +43,9 @@ CMD_SPACE_INFO      = 0x50
 CMD_HASH_FILE       = 0x51
 CMD_FORMAT_FS       = 0x60
 
+ERR_FILE_NOT_FOUND = 0x12
+ERR_FILE_EXISTS = 0x13
+
 def with_lock(f):
     @wraps(f)
     def wrapper(self, *args, **kwargs):
@@ -185,9 +188,10 @@ class ESP32Protocol:
     def _send_frame(self, cmd: int, payload: bytes = b'', flags: int = 0):
         if not self.ser or not self.ser.is_open:
             raise ESP32ProtocolError("Not connected")
-
-        # Flush stale RX data to prevent reading old responses (fixes out of sync bugs)
-        self.ser.reset_input_buffer()
+        if len(payload) > self.max_payload or len(payload) > 0xFFFF:
+            raise ESP32ProtocolError(
+                f"Payload too large: {len(payload)} bytes (max {self.max_payload})"
+            )
 
         length = len(payload)
         # Note: struct.pack('<H', ...) needs to be used for 16-bit fields, B for 8-bit.
@@ -358,8 +362,8 @@ class ESP32Protocol:
                 if self.ser.in_waiting > 0:
                     try:
                         async_cmd, _ = self._receive_frame(timeout_sec=0)
-                        if async_cmd in (CMD_NACK, CMD_ERROR):
-                            raise ESP32ProtocolError("Received async NACK/ERROR during transfer")
+                        if async_cmd == CMD_NACK:
+                            raise ESP32ProtocolError("Received async NACK during transfer")
                     except serial.SerialTimeoutException:
                         pass
                     except Exception as e:
@@ -373,7 +377,8 @@ class ESP32Protocol:
         except Exception as e:
             # Try to abort transfer
             try:
-                self._send_frame(CMD_PUT_FILE_END)
+                self._send_frame(CMD_PUT_FILE_ABORT)
+                self._wait_ack(timeout_sec=2.0)
             except:
                 pass
             raise ESP32ProtocolError(f"Error writing file: {e}")
@@ -397,8 +402,8 @@ class ESP32Protocol:
         if self.ser.in_waiting > 0:
             try:
                 cmd, _ = self._receive_frame(timeout_sec=0)
-                if cmd in (CMD_NACK, CMD_ERROR):
-                    raise ESP32ProtocolError("Received async NACK/ERROR during streaming")
+                if cmd == CMD_NACK:
+                    raise ESP32ProtocolError("Received async NACK during streaming")
             except serial.SerialTimeoutException:
                 pass
             except Exception as e:
@@ -409,6 +414,12 @@ class ESP32Protocol:
         self._send_frame(CMD_PUT_FILE_END)
         if not self._wait_ack():
             raise ESP32ProtocolError("NACK on PUT_FILE_END")
+
+    @with_lock
+    def abort_write_stream(self):
+        self._send_frame(CMD_PUT_FILE_ABORT)
+        if not self._wait_ack(timeout_sec=2.0):
+            raise ESP32ProtocolError("NACK on PUT_FILE_ABORT")
 
     @with_lock
     def delete_file(self, path: str):

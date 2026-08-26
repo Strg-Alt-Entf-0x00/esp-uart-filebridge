@@ -5,10 +5,11 @@ Usage:
     from esp_uart_filebridge import FileManager
 
     fm = FileManager("COM4", baud=3000000)
-    fm.upload("model.frvd", "/sd/models/model.frvd")
-    fm.list_dir("/sd/")
-    fm.download("/sd/log.txt", "log.txt")
-    fm.close()
+    fm.connect()
+    fm.upload_file("local_file.bin", "/sd/data/local_file.bin")
+    fm.list_directory("/sd/")
+    fm.download_file("/sd/data/local_file.bin", "local_copy.bin")
+    fm.disconnect()
 """
 
 from .file_manager import ESP32FileManager as FileManager

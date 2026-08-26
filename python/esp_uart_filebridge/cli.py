@@ -4,21 +4,19 @@ esp-file-bridge CLI - Command-line tool for esp-uart-filebridge.
 
 Usage:
     esp-file-bridge ls /sd/ --port COM4
-    esp-file-bridge upload local.frvd /sd/models/local.frvd --port COM4
-    esp-file-bridge upload_dir ./models /sd/models/ --port COM4
+    esp-file-bridge upload local_file.bin /sd/data/local_file.bin --port COM4
+    esp-file-bridge upload_dir ./local_directory /sd/data/ --port COM4
     esp-file-bridge download /sd/log.txt ./log.txt --port COM4
     esp-file-bridge delete /sd/old_file.bin --port COM4
     esp-file-bridge mkdir /sd/new_dir --port COM4
     esp-file-bridge format --port COM4
     esp-file-bridge info --port COM4
-    esp-file-bridge speed --port COM4
 """
 
 import sys
 import os
 import argparse
 import logging
-from pathlib import Path
 from .protocol import ESP32Protocol, ESP32ProtocolError
 from .file_manager import ESP32FileManager
 
@@ -37,12 +35,18 @@ def main():
 
     sub.add_parser("info", help="Show device information")
 
+    stat_p = sub.add_parser("stat", help="Show file or directory metadata")
+    stat_p.add_argument("path", help="Remote file or directory path")
+
+    hash_p = sub.add_parser("hash", help="Show CRC32 hash of a remote file")
+    hash_p.add_argument("path", help="Remote file path")
+
     ls_p = sub.add_parser("ls", help="List directory contents")
     ls_p.add_argument("path", nargs="?", default="/sd/", help="Remote path (default: /sd/)")
 
     ul_p = sub.add_parser("upload", help="Upload local file to ESP32")
     ul_p.add_argument("local",  help="Local file path")
-    ul_p.add_argument("remote", help="Remote file path on ESP32 (e.g. /sd/models/file.frvd)")
+    ul_p.add_argument("remote", help="Remote file path on ESP32 (e.g. /sd/data/file.bin)")
     ul_p.add_argument("--verify", action="store_true", help="Verify CRC32 after upload")
 
     uld_p = sub.add_parser("upload_dir", help="Upload entire local directory to ESP32")
@@ -70,8 +74,6 @@ def main():
     fmt_p = sub.add_parser("format", help="Format the SD card (WARNING: Destroys all data)")
     fmt_p.add_argument("--force", action="store_true", help="Do not prompt for confirmation")
 
-    sub.add_parser("speed", help="Run upload speed benchmark (/dev/null)")
-    
     webdav_p = sub.add_parser("webdav", help="Start WebDAV server (network drive)")
     webdav_p.add_argument("--host", default="127.0.0.1", help="HTTP server host (default: 127.0.0.1)")
     webdav_p.add_argument("--webdav-port", type=int, default=8080, help="HTTP server port (default: 8080)")
@@ -90,7 +92,8 @@ def main():
     try:
         proto = ESP32Protocol()
         manager = ESP32FileManager(proto)
-        proto.connect(args.port, args.baud)
+        if not proto.connect(args.port, args.baud):
+            raise ESP32ProtocolError(f"Could not connect to {args.port}")
 
         if args.command == "info":
             info = manager.get_device_info()
@@ -108,6 +111,19 @@ def main():
             for entry in sorted(entries, key=lambda item: (not item.is_directory, item.name)):
                 suffix = "/" if entry.is_directory else f"  ({entry.size:,} bytes)"
                 print(f"  {entry.name}{suffix}")
+
+        elif args.command == "stat":
+            info = manager.get_file_stat(args.path)
+            kind = "directory" if info.is_directory else "file"
+            print(f"Path       : {args.path}")
+            print(f"Type       : {kind}")
+            print(f"Size       : {info.size} bytes")
+            print(f"Timestamp  : {info.timestamp}")
+            print(f"Attributes : 0x{info.attributes:02X}")
+
+        elif args.command == "hash":
+            value = manager.get_file_hash(args.path)
+            print(f"CRC32      : {value:08X}")
 
         elif args.command == "upload":
             file_size = os.path.getsize(args.local)
@@ -129,29 +145,9 @@ def main():
                     sys.exit(1)
 
         elif args.command == "upload_dir":
-            local_dir = Path(args.local_dir)
-            if not local_dir.is_dir():
-                print(f"[ERROR] {args.local_dir} is not a directory.")
-                sys.exit(1)
-            
             print(f"Uploading directory {args.local_dir} -> {args.remote_dir}")
-            for path in local_dir.rglob('*'):
-                if path.is_file():
-                    if '.git' in path.parts or path.suffix == '.json':
-                        continue
-                    rel_path = path.relative_to(local_dir)
-                    remote_path = f"{args.remote_dir}/{rel_path.as_posix()}"
-                    remote_parent = "/".join(remote_path.split('/')[:-1])
-                    
-                    try:
-                        manager.create_directory(remote_parent)
-                    except ESP32ProtocolError:
-                        pass # probably exists
-                        
-                    file_size = os.path.getsize(path)
-                    print(f"  -> {remote_path} ({file_size:,} bytes)")
-                    manager.upload_file(str(path), remote_path)
-            print("[OK] Directory upload complete")
+            count = manager.upload_directory(args.local_dir, args.remote_dir)
+            print(f"[OK] Uploaded {count} files")
 
         elif args.command == "download":
             print(f"Downloading {args.remote} -> {args.local}")
@@ -186,22 +182,6 @@ def main():
             manager.format_fs()
             print("[OK] Format complete")
 
-        elif args.command == "speed":
-            import time, tempfile
-            size_mb = 2
-            print(f"Speed test: uploading {size_mb} MB to /dev/null ...")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as f:
-                f.write(b'\xAA' * (size_mb * 1024 * 1024))
-                tmp = f.name
-            try:
-                t0 = time.time()
-                manager.upload_file(tmp, "/dev/null")
-                elapsed = time.time() - t0
-                rate_kbs = (size_mb * 1024) / elapsed
-                print(f"[OK] {size_mb} MB in {elapsed:.2f}s = {rate_kbs:.0f} KB/s")
-            finally:
-                os.unlink(tmp)
-        
         elif args.command == "webdav":
             # WebDAV server requires additional dependencies
             try:
