@@ -198,10 +198,10 @@ All pins and transfer parameters are configurable via `idf.py menuconfig` under
 | `UART_FILEBRIDGE_RTS_PIN` | 50 | RTS GPIO (HW flow ctrl) |
 | `UART_FILEBRIDGE_CTS_PIN` | 29 | CTS GPIO (HW flow ctrl) |
 | `UART_FILEBRIDGE_BAUD` | 3000000 | Baud rate |
-| `UART_FILEBRIDGE_RX_BUF` | 8192 | RX buffer size |
+| `UART_FILEBRIDGE_RX_BUF_SIZE` | 8192 | RX buffer size |
 | `UART_FILEBRIDGE_TASK_STACK` | 16384 | RX task stack size |
 | `UART_FILEBRIDGE_TASK_PRIO` | 5 | RX task priority |
-| `UART_FILEBRIDGE_P4_LDO` | y (P4 only) | Enable ESP32-P4 SD LDO power ctrl |
+| `UART_FILEBRIDGE_P4_LDO_ENABLE` | y (P4 only) | Enable ESP32-P4 SD LDO power ctrl |
 | `UART_FILEBRIDGE_P4_LDO_CHAN` | 4 | LDO channel for P4 SD power |
 
 ## Protocol Architecture

@@ -9,6 +9,7 @@
 #include "file_protocol.h"
 #include "filesystem_manager.h"
 
+#include <cstring>
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -75,6 +76,11 @@ esp_err_t esp_uart_filebridge_init(const esp_uart_filebridge_config_t *cfg) {
     if (s_running) {
         ESP_LOGW(TAG, "Already initialized");
         return ESP_ERR_INVALID_STATE;
+    }
+    if (cfg->sd_mount_point &&
+        (cfg->sd_mount_point[0] != '/' || strlen(cfg->sd_mount_point) >= 64)) {
+        ESP_LOGE(TAG, "sd_mount_point must be an absolute path shorter than 64 bytes");
+        return ESP_ERR_INVALID_ARG;
     }
 
     s_uart_num = cfg->uart_num;

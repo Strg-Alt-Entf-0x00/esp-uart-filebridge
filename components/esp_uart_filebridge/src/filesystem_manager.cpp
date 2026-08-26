@@ -40,7 +40,12 @@ esp_err_t FilesystemManager::init(const char *mount_point, bool do_mount) {
         return ESP_OK;
     }
 
-    if (mount_point && strlen(mount_point) < sizeof(m_mount_point)) {
+    if (mount_point && strlen(mount_point) >= sizeof(m_mount_point)) {
+        ESP_LOGE(TAG, "Mount point is too long");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (mount_point) {
         strncpy(m_mount_point, mount_point, sizeof(m_mount_point) - 1);
         m_mount_point[sizeof(m_mount_point) - 1] = '\0';
     }

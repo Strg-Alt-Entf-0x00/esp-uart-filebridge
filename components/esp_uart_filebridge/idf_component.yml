@@ -1,8 +1,0 @@
-## IDF Component Manager Manifest
-version: "1.0.0"
-description: "Universal ESP32 UART File Bridge - Binary protocol for reliable file transfer over UART/FT232R"
-url: "https://github.com/Strg-Alt-Entf-0x00/esp-uart-filebridge"
-license: "MIT"
-dependencies:
-  idf: ">=5.2.0"
-

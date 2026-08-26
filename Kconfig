@@ -1,3 +1,7 @@
+# This Kconfig file provides configuration options when the repository 
+# is used as a managed component. The content is identical to the 
+# component's own Kconfig file.
+
 menu "ESP UART File Bridge"
 
     config UART_FILEBRIDGE_NUM

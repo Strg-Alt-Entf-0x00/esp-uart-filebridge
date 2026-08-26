@@ -396,7 +396,7 @@ void FileProtocol::handle_device_info() {
             info.sd_size = ((uint64_t)card->csd.capacity) * card->csd.sector_size;
             
             uint64_t sd_total = 0, sd_free = 0;
-            if (m_fs_manager->get_space_info(CONFIG_UART_FILEBRIDGE_SD_MOUNT_POINT, &sd_total, &sd_free) == ESP_OK) {
+            if (m_fs_manager->get_space_info(m_fs_manager->get_mount_point(), &sd_total, &sd_free) == ESP_OK) {
                 info.sd_free = sd_free;
             }
             

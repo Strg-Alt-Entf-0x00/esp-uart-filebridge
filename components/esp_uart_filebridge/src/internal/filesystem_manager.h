@@ -103,7 +103,7 @@ private:
     bool m_initialized  = false;
     bool m_sd_mounted   = false;
     bool m_owns_mount   = false;  // true = we mounted, we must unmount
-    char m_mount_point[64] = "/sd";
+    char m_mount_point[16] = "/sd";
 
     sdmmc_card_t* m_sd_card    = nullptr;
     void*         m_sd_pwr_ctrl = nullptr;  // ESP32-P4 LDO handle (or nullptr)

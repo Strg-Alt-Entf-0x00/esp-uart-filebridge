@@ -10,6 +10,9 @@
 
 #pragma once
 
+#include <stdbool.h>
+#include "sdkconfig.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -81,10 +84,10 @@ typedef struct {
  *
  * @param cfg  Configuration. Must not be NULL. Use
  *             ESP_UART_FILEBRIDGE_CONFIG_DEFAULT() for sane defaults.
- * @return ESP_OK on success
+ * @return ESP_OK when the bridge starts. SD mount failure is non-fatal and
+ *         makes file operations unavailable until storage is mounted.
  *         ESP_ERR_INVALID_ARG  if cfg is NULL
  *         ESP_ERR_INVALID_STATE if already initialized
- *         ESP_FAIL on UART driver or SD mount failure
  */
 esp_err_t esp_uart_filebridge_init(const esp_uart_filebridge_config_t *cfg);
 

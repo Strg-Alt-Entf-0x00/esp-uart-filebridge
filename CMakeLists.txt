@@ -1,9 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
-# This CMakeLists.txt serves as a wrapper for the actual component
-# located in components/esp_uart_filebridge/
-# It allows the entire repository (with python/ tools) to be used
-# as a managed component while keeping the modular structure.
+# The repository root is the managed ESP-IDF component. Python tools and
+# examples are kept alongside the component sources but are not registered.
 
 idf_component_register(
     SRCS
@@ -12,9 +10,11 @@ idf_component_register(
         "components/esp_uart_filebridge/src/filesystem_manager.cpp"
     INCLUDE_DIRS
         "components/esp_uart_filebridge/include"
+    PRIV_INCLUDE_DIRS
+        "components/esp_uart_filebridge/src/internal"
     REQUIRES
-        driver
         esp_driver_uart
+    PRIV_REQUIRES
         esp_psram
         fatfs
         sdmmc
