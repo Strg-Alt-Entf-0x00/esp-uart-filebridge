@@ -62,7 +62,7 @@ class ESP32FileManager:
             for entry in directories:
                 logger.info("  [DIR]  %s", entry.name)
             for entry in files:
-                logger.info("  %12, bytes  %s", entry.size, entry.name)
+                logger.info("  %s bytes  %s", f"{entry.size:,}", entry.name)
             logger.info("Total: %d directories, %d files", len(directories), len(files))
         return entries
 
