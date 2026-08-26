@@ -204,6 +204,20 @@ void FileProtocol::try_parse_frame() {
         send_error(ERR_INVALID_CRC);
         return;
     }
+
+    // Validate sequence ordering after the first received frame seeds the expected value.
+    if (!m_rx_sequence_valid) {
+        m_rx_sequence = header->sequence;
+        m_rx_sequence_valid = true;
+    } else if (header->sequence != m_rx_sequence) {
+        ESP_LOGW(TAG, "Sequence mismatch: expected=%u actual=%u cmd=0x%02X",
+                 m_rx_sequence, header->sequence, header->cmd);
+        m_rx_sequence_valid = false;
+        reset_rx_buffer();
+        send_error(ERR_SEQUENCE_ERROR);
+        return;
+    }
+    m_rx_sequence = (m_rx_sequence + 1) & 0xFFFF;
     
     // Extract payload
     const uint8_t* payload = (header->length > 0) ? (m_rx_buffer + PROTO_HEADER_SIZE) : nullptr;
@@ -300,6 +314,7 @@ void FileProtocol::dispatch_command(const ProtocolHeader* header, const uint8_t*
 
 void FileProtocol::reset_rx_buffer() {
     m_rx_idx = 0;
+    m_rx_sequence_valid = false;
 }
 
 void FileProtocol::abort_active_transfer() {
@@ -496,6 +511,10 @@ void FileProtocol::handle_space_info(const uint8_t* payload, uint16_t length) {
     }
     
     const char* path = reinterpret_cast<const char*>(payload);
+    if (m_fs_manager->validate_path(path) != ESP_OK) {
+        send_error(ERR_INVALID_PATH);
+        return;
+    }
     ESP_LOGD(TAG, "SPACE_INFO: %s", path);
     
     uint64_t total = 0, free = 0;
@@ -535,6 +554,10 @@ void FileProtocol::handle_get_file_begin(const uint8_t* payload, uint16_t length
     }
     
     const char* path = reinterpret_cast<const char*>(payload);
+    if (m_fs_manager->validate_path(path) != ESP_OK) {
+        send_error(ERR_INVALID_PATH);
+        return;
+    }
     
     // Open file for reading
     FILE* f = fopen(path, "rb");
@@ -543,6 +566,8 @@ void FileProtocol::handle_get_file_begin(const uint8_t* payload, uint16_t length
         send_error(ERR_FILE_NOT_FOUND);
         return;
     }
+
+    m_transfer_active = true;
     
     // Get file size
     fseek(f, 0, SEEK_END);
@@ -588,6 +613,8 @@ void FileProtocol::handle_get_file_begin(const uint8_t* payload, uint16_t length
     
     // [FIX] CRITICAL FIX: Clear transfer state after download completes!
     m_transfer_active = false;
+    m_transfer_total = 0;
+    m_transfer_bytes = 0;
     m_transfer_bytes = 0;
     m_transfer_total = 0;
     
@@ -852,7 +879,7 @@ void FileProtocol::handle_rename(const uint8_t* payload, uint16_t length) {
     
     // Payload format: [old_path\0new_path\0]
     const char* old_path = reinterpret_cast<const char*>(payload);
-    size_t old_len = strlen(old_path);
+    size_t old_len = strnlen(old_path, length);
     
     if (old_len + 1 >= length) {
         send_error(ERR_INVALID_PATH);
@@ -860,6 +887,10 @@ void FileProtocol::handle_rename(const uint8_t* payload, uint16_t length) {
     }
     
     const char* new_path = old_path + old_len + 1;
+    if (strnlen(new_path, length - old_len - 1) == length - old_len - 1) {
+        send_error(ERR_INVALID_PATH);
+        return;
+    }
     
     ESP_LOGI(TAG, "RENAME: %s -> %s", old_path, new_path);
     
@@ -905,7 +936,7 @@ void FileProtocol::handle_copy(const uint8_t* payload, uint16_t length) {
     
     // Payload format: [src_path\0dst_path\0]
     const char* src_path = reinterpret_cast<const char*>(payload);
-    size_t src_len = strlen(src_path);
+    size_t src_len = strnlen(src_path, length);
     
     if (src_len + 1 >= length) {
         send_error(ERR_INVALID_PATH);
@@ -913,6 +944,10 @@ void FileProtocol::handle_copy(const uint8_t* payload, uint16_t length) {
     }
     
     const char* dst_path = src_path + src_len + 1;
+    if (strnlen(dst_path, length - src_len - 1) == length - src_len - 1) {
+        send_error(ERR_INVALID_PATH);
+        return;
+    }
     
     ESP_LOGI(TAG, "COPY: %s -> %s", src_path, dst_path);
     

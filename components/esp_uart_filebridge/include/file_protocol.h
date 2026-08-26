@@ -117,9 +117,10 @@ private:
     // TX Buffer for frame transmission (static to avoid stack overflow)
     uint8_t m_tx_buffer[PROTO_HEADER_SIZE + PROTO_MAX_PAYLOAD + PROTO_CRC_SIZE];
     
-    // Sequence counter
+    // Sequence counters
     uint16_t m_tx_sequence = 0;
     uint16_t m_rx_sequence = 0;
+    bool m_rx_sequence_valid = false;
     
     // Transfer state
     bool m_transfer_active = false;

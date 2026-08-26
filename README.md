@@ -24,15 +24,31 @@ UART is an ancient protocol, but when implemented correctly, it is **rock solid*
 
 ## ⚡ Real-World Performance
 
-Tested on an ESP32-P4 (360 MHz) writing to a standard SD Card, using an FT232R adapter at **3 Mbit/s** with Hardware Flow Control enabled.
+Measured on one ESP32-P4 setup (360 MHz) using an FT232R adapter at **3,000,000 baud** with Hardware Flow Control enabled.
 
 | Scenario | File Size | Upload (PC -> SD) | Download (SD -> PC) |
 |---|---|---|---|
 | **Small File** (Overhead Test) | 1 KB | ~0.22s | ~0.22s |
 | **Large File** (Throughput Test) | 1 MiB | ~4.5s (**~227 KiB/s**) | ~3.7s (**~278 KiB/s**) |
-| **Raw UART Limit** (No SD write) | 1 MB | ~4.4s (**~231 KiB/s**) | N/A |
+| **Raw UART Limit** (No SD write) | 2 MB | ~8.7s (**~236 KiB/s**) | N/A |
 
-*Note: Results were measured on one ESP32-P4 setup at 3 Mbit/s with an FT232R and RTS/CTS. Performance depends on the adapter, wiring, UART configuration and SD card.*
+*Note: These are setup-specific measurements, not universal guarantees. They should be re-measured after protocol, buffer, UART, or hardware changes. Performance depends on the adapter, wiring, UART configuration and SD card.*
+
+## Verification status
+
+The current live regression on the validated setup passed **10/10 tests**:
+
+- setup and connection
+- device info query
+- directory creation and listing
+- upload of multiple file sizes
+- download and verification of multiple file sizes
+- CRC32 validation
+- delete operations
+- streaming upload
+- UART throughput benchmark
+
+This is a strong functional verification for the current firmware and host implementation, but it is not the same as a final public release gate. Any protocol, serial, or performance-affecting change should be followed by a fresh measurement and live regression run.
 
 ---
 

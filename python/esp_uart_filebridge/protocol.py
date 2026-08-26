@@ -108,6 +108,7 @@ class ESP32Protocol:
     def __init__(self):
         self.ser = None
         self.sequence = 0
+        self._rx_sequence = None
         self._lock = threading.RLock()
         self.chunk_size = PROTO_FILE_CHUNK_SIZE
         self.max_payload = PROTO_MAX_PAYLOAD
@@ -121,6 +122,8 @@ class ESP32Protocol:
                 timeout=1.0,
                 rtscts=True  # HW flow ctrl enabled
             )
+            self.sequence = 0
+            self._rx_sequence = None
             self.ser.reset_input_buffer()
             self._drain_boot_noise()
             
@@ -158,32 +161,37 @@ class ESP32Protocol:
     @with_lock
     def disconnect(self):
         if self.ser and self.ser.is_open:
+            self._rx_sequence = None
             self.ser.close()
         self.ser = None
+        self._rx_sequence = None
 
     def _drain_boot_noise(self, max_wait_ms=5000):
         """Drain boot messages and noise from the serial buffer."""
-        start = time.time()
+        deadline = time.monotonic() + (max_wait_ms / 1000.0)
         self.ser.timeout = 0.1
         consecutive_quiet = 0
         total_drained = 0
-        
+
         logger.debug("Draining boot noise...")
-        while (time.time() - start) * 1000 < max_wait_ms:
+        while time.monotonic() < deadline:
             data = self.ser.read(64)
             if data:
                 total_drained += len(data)
                 consecutive_quiet = 0
             else:
                 consecutive_quiet += 1
-                if consecutive_quiet >= 3:  # Increased from 2 to 3
+                if consecutive_quiet >= 3:
                     break
-        
+
         logger.debug(f"Drained {total_drained} bytes of boot noise")
-        self.ser.timeout = 5.0 # Restore normal timeout
+        self.ser.timeout = 5.0  # Restore normal timeout
 
     def _calc_crc32(self, data: bytes) -> int:
         return binascii.crc32(data) & 0xFFFFFFFF
+
+    def _deadline(self, timeout_sec: float) -> float:
+        return time.monotonic() + max(timeout_sec, 0.0)
 
     def _send_frame(self, cmd: int, payload: bytes = b'', flags: int = 0):
         if not self.ser or not self.ser.is_open:
@@ -215,20 +223,21 @@ class ESP32Protocol:
         if not self.ser or not self.ser.is_open:
             raise ESP32ProtocolError("Not connected")
 
-        self.ser.timeout = timeout_sec
-        
+        deadline = self._deadline(timeout_sec)
+        self.ser.timeout = min(max(timeout_sec, 0.05), 0.5)
+
         # Sync to magic
         synced = False
-        start_time = time.time()
-        while time.time() - start_time < timeout_sec:
+        while time.monotonic() < deadline:
             b = self.ser.read(1)
-            if not b: continue
+            if not b:
+                continue
             if b[0] == PROTO_MAGIC_0:
                 b2 = self.ser.read(1)
                 if b2 and b2[0] == PROTO_MAGIC_1:
                     synced = True
                     break
-        
+
         if not synced:
             raise ESP32ProtocolError("Sync timeout")
 
@@ -237,7 +246,7 @@ class ESP32Protocol:
             raise ESP32ProtocolError("Header timeout")
 
         version, cmd, flags, seq, length = struct.unpack('<BBBHH', header_rest)
-        
+
         payload = b''
         if length > 0:
             payload = self.ser.read(length)
@@ -249,11 +258,19 @@ class ESP32Protocol:
             raise ESP32ProtocolError("CRC timeout")
         
         received_crc = struct.unpack('<I', crc_bytes)[0]
-        
+
         full_frame = bytes([PROTO_MAGIC_0, PROTO_MAGIC_1]) + header_rest + payload
         calc_crc = self._calc_crc32(full_frame)
         if calc_crc != received_crc:
             raise ESP32ProtocolError("CRC mismatch")
+
+        if self._rx_sequence is None:
+            self._rx_sequence = seq
+        elif seq != self._rx_sequence:
+            raise ESP32ProtocolError(
+                f"Sequence mismatch: expected {self._rx_sequence}, got {seq}"
+            )
+        self._rx_sequence = (self._rx_sequence + 1) & 0xFFFF
 
         if expected_cmd is not None and cmd != expected_cmd:
             if cmd == CMD_NACK:
@@ -263,9 +280,12 @@ class ESP32Protocol:
         return cmd, payload
 
     def _wait_ack(self, timeout_sec=2.0) -> bool:
-        start_time = time.time()
-        while time.time() - start_time < timeout_sec:
-            cmd, _ = self._receive_frame(timeout_sec=timeout_sec)
+        deadline = self._deadline(timeout_sec)
+        while time.monotonic() < deadline:
+            try:
+                cmd, _ = self._receive_frame(timeout_sec=max(0.05, min(0.5, deadline - time.monotonic())))
+            except ESP32ProtocolError:
+                return False
             if cmd == CMD_PROGRESS:
                 continue
             if cmd == CMD_NACK:
@@ -274,9 +294,12 @@ class ESP32Protocol:
         return False
 
     def _wait_ack_with_error(self, timeout_sec=2.0) -> tuple[bool, int]:
-        start_time = time.time()
-        while time.time() - start_time < timeout_sec:
-            cmd, payload = self._receive_frame(timeout_sec=timeout_sec)
+        deadline = self._deadline(timeout_sec)
+        while time.monotonic() < deadline:
+            try:
+                cmd, payload = self._receive_frame(timeout_sec=max(0.05, min(0.5, deadline - time.monotonic())))
+            except ESP32ProtocolError:
+                return False, 0
             if cmd == CMD_PROGRESS:
                 continue
             if cmd == CMD_NACK:
@@ -324,10 +347,13 @@ class ESP32Protocol:
     def read_file(self, path: str) -> bytes:
         path_bytes = path.encode('utf-8') + b'\0'
         self._send_frame(CMD_GET_FILE_BEGIN, path_bytes)
-        
+
         # Read file size from ACK
         cmd, ack_payload = self._receive_frame(CMD_ACK, timeout_sec=5.0)
-        
+        if len(ack_payload) < 8:
+            raise ESP32ProtocolError("Download size ACK payload too short")
+        expected_size = struct.unpack('<Q', ack_payload[:8])[0]
+
         data = bytearray()
         while True:
             cmd, payload = self._receive_frame(timeout_sec=10.0)
@@ -337,6 +363,11 @@ class ESP32Protocol:
                 data.extend(payload)
             elif cmd == CMD_NACK:
                 raise ESP32ProtocolError("NACK during file read")
+
+        if len(data) != expected_size:
+            raise ESP32ProtocolError(
+                f"Download size mismatch: expected {expected_size}, got {len(data)}"
+            )
         return bytes(data)
 
     @with_lock
