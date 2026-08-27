@@ -160,14 +160,32 @@ void FileProtocol::process_rx_data(const uint8_t* data, size_t length) {
 }
 
 void FileProtocol::try_parse_frame() {
-    // Sync to magic bytes
-    while (m_rx_idx >= 2) {
-        if (m_rx_buffer[0] == PROTO_MAGIC_0 && m_rx_buffer[1] == PROTO_MAGIC_1) {
-            break;
+    // Sync to magic bytes using linear scan to prevent CPU stall
+    if (m_rx_idx >= 2) {
+        size_t sync_idx = 0;
+        bool found = false;
+        for (size_t i = 0; i < m_rx_idx - 1; i++) {
+            if (m_rx_buffer[i] == PROTO_MAGIC_0 && m_rx_buffer[i+1] == PROTO_MAGIC_1) {
+                sync_idx = i;
+                found = true;
+                break;
+            }
         }
-        // Discard invalid byte
-        memmove(m_rx_buffer, m_rx_buffer + 1, m_rx_idx - 1);
-        m_rx_idx--;
+        
+        if (!found) {
+            // Keep the last byte if it's PROTO_MAGIC_0 (might be the start of a valid frame)
+            if (m_rx_idx > 0 && m_rx_buffer[m_rx_idx - 1] == PROTO_MAGIC_0) {
+                m_rx_buffer[0] = PROTO_MAGIC_0;
+                m_rx_idx = 1;
+            } else {
+                m_rx_idx = 0;
+            }
+            return;
+        } else if (sync_idx > 0) {
+            // Discard invalid bytes by moving the valid data to the front ONCE
+            memmove(m_rx_buffer, m_rx_buffer + sync_idx, m_rx_idx - sync_idx);
+            m_rx_idx -= sync_idx;
+        }
     }
     
     // Check if we still have at least a header
@@ -340,6 +358,14 @@ void FileProtocol::abort_active_transfer() {
         free(m_sd_write_buffer);
         m_sd_write_buffer = nullptr;
     }
+    
+    m_transfer_active = false;
+    m_transfer_bytes = 0;
+    m_transfer_total = 0;
+    m_transfer_path[0] = '\0';
+    m_transfer_temp_path[0] = '\0';
+    m_benchmark_mode = false;
+    restore_logs_if_needed();
     
     // Restore logs if we were in a transfer
     if (m_transfer_active) {
@@ -849,11 +875,13 @@ void FileProtocol::handle_put_file_end() {
         m_sd_write_buffer = nullptr;
     }
 
-    if (rename(m_transfer_temp_path, m_transfer_path) != 0) {
-        ESP_LOGE(TAG, "Failed to commit upload %s: errno=%d", m_transfer_path, errno);
-        abort_active_transfer();
-        send_error(ERR_IO_ERROR);
-        return;
+    if (!m_benchmark_mode) {
+        if (rename(m_transfer_temp_path, m_transfer_path) != 0) {
+            ESP_LOGE(TAG, "Failed to commit upload %s: errno=%d", m_transfer_path, errno);
+            abort_active_transfer();
+            send_error(ERR_IO_ERROR);
+            return;
+        }
     }
     
     m_transfer_active = false;
@@ -1050,4 +1078,7 @@ void FileProtocol::handle_format_fs(const uint8_t* payload, uint16_t length) {
         send_error(ERR_IO_ERROR);
     }
 }
+
+
+
 

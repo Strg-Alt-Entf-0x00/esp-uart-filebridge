@@ -1,4 +1,4 @@
-"""Universal high-level file operations for the ESP UART file bridge."""
+﻿"""Universal high-level file operations for the ESP UART file bridge."""
 
 import logging
 import os
@@ -73,19 +73,27 @@ class ESP32FileManager:
         progress_callback: Optional[ProgressCallback] = None,
     ) -> None:
         size = os.path.getsize(local_path)
-        try:
-            self.proto.begin_write_stream(remote_path, size)
-            sent = 0
-            with open(local_path, "rb") as source:
-                while chunk := source.read(self.proto.chunk_size):
-                    self.proto.write_stream_data(chunk)
-                    sent += len(chunk)
-                    if progress_callback:
-                        progress_callback(sent, size)
-            self.proto.end_write_stream()
-        except Exception:
-            self._abort_transfer()
-            raise
+        attempts = 3
+        for attempt in range(1, attempts + 1):
+            try:
+                self.proto.begin_write_stream(remote_path, size)
+                sent = 0
+                with open(local_path, "rb") as source:
+                    while chunk := source.read(self.proto.chunk_size):
+                        self.proto.write_stream_data(chunk)
+                        sent += len(chunk)
+                        if progress_callback:
+                            progress_callback(sent, size)
+                self.proto.end_write_stream()
+                return
+            except Exception as e:
+                self._abort_transfer()
+                if attempt == attempts:
+                    raise
+                import logging
+                logging.getLogger(__name__).warning(f"Upload failed (attempt {attempt}/{attempts}): {e}. Retrying in 1s...")
+                import time
+                time.sleep(1)
 
     def upload_directory(
         self,
@@ -175,3 +183,5 @@ class ESP32FileManager:
             self.proto.abort_write_stream()
         except Exception:
             logger.debug("Could not abort the failed remote transfer", exc_info=True)
+
+

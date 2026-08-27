@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Comprehensive test suite for esp-uart-filebridge.
 
@@ -440,6 +440,60 @@ class LiveTestRunner:
             self.failed += 1
             return False
     
+    def test_noise_recovery(self):
+        """Test UART noise tolerance and recovery."""
+        log_test("Noise Recovery")
+        try:
+            log_info("Injecting random noise into UART TX buffer...")
+            self.manager.proto.ser.write(b'\x00\xFF\x55\xAA' * 10)
+            
+            # Immediately try to upload a file (parser should discard noise and sync)
+            test_data = b"Noise recovery test data"
+            remote_path = f"{TEST_DIR}/noise_test.txt"
+            self.manager.upload_file_from_bytes(test_data, remote_path)
+            
+            # Verify
+            downloaded = self.manager.download_file_to_bytes(remote_path)
+            if downloaded == test_data:
+                log_pass("Recovered from noise and transferred successfully")
+                self.passed += 1
+                return True
+            else:
+                log_fail("Data corrupted after noise injection")
+                self.failed += 1
+                return False
+        except Exception as e:
+            log_fail(f"Failed to recover from noise: {e}")
+            self.failed += 1
+            return False
+
+    def test_stress_upload(self):
+        """Test uploading a file repeatedly without resetting."""
+        log_test("Stress Upload (10 Iterations)")
+        try:
+            test_data = b"Stress test chunk " * 1024  # ~18KB
+            success_count = 0
+            for i in range(10):
+                remote_path = f"{TEST_DIR}/stress_test_{i}.bin"
+                try:
+                    self.manager.upload_file_from_bytes(test_data, remote_path)
+                    success_count += 1
+                except Exception as e:
+                    log_warn(f"Iteration {i} failed: {e}")
+            
+            if success_count == 10:
+                log_pass("All 10 stress uploads successful")
+                self.passed += 1
+                return True
+            else:
+                log_fail(f"Only {success_count}/10 stress uploads succeeded")
+                self.failed += 1
+                return False
+        except Exception as e:
+            log_fail(f"Stress test crashed: {e}")
+            self.failed += 1
+            return False
+
     def test_webdav(self):
         """Test WebDAV functionality (if available)."""
         log_test("WebDAV Module")
@@ -486,6 +540,8 @@ class LiveTestRunner:
             self.test_directory_delete()
             self.test_streaming_upload()
             self.test_speed_benchmark()
+            self.test_noise_recovery()
+            self.test_stress_upload()
             
             # Optional WebDAV test
             if test_webdav:
@@ -532,3 +588,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

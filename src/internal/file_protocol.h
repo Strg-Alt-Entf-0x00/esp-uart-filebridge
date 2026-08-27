@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ESP32-P4 USB Bridge File Manager - File Protocol Handler
  * 
  * Handles protocol frame parsing and command execution
@@ -111,7 +111,7 @@ private:
     esp_err_t (*m_tx_callback)(const uint8_t*, size_t) = nullptr;
     
     // RX Buffer for frame assembly
-    uint8_t m_rx_buffer[PROTO_HEADER_SIZE + PROTO_MAX_PAYLOAD + PROTO_CRC_SIZE];
+    uint8_t m_rx_buffer[PROTO_HEADER_SIZE + PROTO_MAX_PAYLOAD + PROTO_CRC_SIZE + 256];
     size_t m_rx_idx = 0;
     
     // TX Buffer for frame transmission (static to avoid stack overflow)
@@ -168,4 +168,5 @@ private:
     void suppress_logs_if_needed();
     void restore_logs_if_needed();
 };
+
 

@@ -1,4 +1,4 @@
-import serial
+﻿import serial
 import serial.tools.list_ports
 import struct
 import binascii
@@ -385,7 +385,7 @@ class ESP32Protocol:
                 # Check for asynchronous NACKs (e.g. SD error) without blocking
                 if self.ser.in_waiting > 0:
                     try:
-                        async_cmd, _ = self._receive_frame(timeout_sec=0)
+                        async_cmd, _ = self._receive_frame(timeout_sec=0.1)
                         if async_cmd == CMD_NACK:
                             raise ESP32ProtocolError("Received async NACK during transfer")
                     except serial.SerialTimeoutException:
@@ -425,7 +425,7 @@ class ESP32Protocol:
         # Check for asynchronous NACKs without blocking
         if self.ser.in_waiting > 0:
             try:
-                cmd, _ = self._receive_frame(timeout_sec=0)
+                cmd, _ = self._receive_frame(timeout_sec=0.1)
                 if cmd == CMD_NACK:
                     raise ESP32ProtocolError("Received async NACK during streaming")
             except serial.SerialTimeoutException:
@@ -531,3 +531,4 @@ class ESP32Protocol:
         self._send_frame(CMD_COPY, payload)
         if not self._wait_ack():
             raise ESP32ProtocolError("NACK on COPY")
+
