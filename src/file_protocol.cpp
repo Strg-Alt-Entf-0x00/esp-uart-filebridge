@@ -15,6 +15,7 @@
 #include <cerrno>
 
 static const char* TAG = "file_protocol";
+static constexpr char UPLOAD_TEMP_SUFFIX[] = ".esp-uart-filebridge.part";
 
 // Tags to suppress during file transfers for optimal performance
 // IMPORTANT: DO NOT suppress file_protocol itself - only I/O subsystems
@@ -206,7 +207,12 @@ void FileProtocol::try_parse_frame() {
     }
 
     // Validate sequence ordering after the first received frame seeds the expected value.
-    if (!m_rx_sequence_valid) {
+    if (header->cmd == CMD_HELLO) {
+        // HELLO starts a new host session; accept its sequence and restart RX/TX numbering.
+        m_rx_sequence = header->sequence;
+        m_rx_sequence_valid = true;
+        m_tx_sequence = 0;
+    } else if (!m_rx_sequence_valid) {
         m_rx_sequence = header->sequence;
         m_rx_sequence_valid = true;
     } else if (header->sequence != m_rx_sequence) {
@@ -318,15 +324,16 @@ void FileProtocol::reset_rx_buffer() {
 }
 
 void FileProtocol::abort_active_transfer() {
-    const bool had_active_transfer = m_transfer_active;
-
     if (m_transfer_file) {
         fclose(m_transfer_file);
         m_transfer_file = nullptr;
     }
 
-    if (had_active_transfer && !m_benchmark_mode && m_transfer_temp_path[0] != '\0') {
-        unlink(m_transfer_temp_path);
+    if (!m_benchmark_mode && m_transfer_temp_path[0] != '\0') {
+        if (unlink(m_transfer_temp_path) != 0 && errno != ENOENT) {
+            ESP_LOGW(TAG, "Failed to remove partial upload %s: errno=%d",
+                     m_transfer_temp_path, errno);
+        }
     }
     
     if (m_sd_write_buffer) {
@@ -353,6 +360,11 @@ void FileProtocol::abort_active_transfer() {
 // ============================================================================
 
 void FileProtocol::handle_hello() {
+    if (m_transfer_active || m_transfer_temp_path[0] != '\0') {
+        ESP_LOGW(TAG, "Aborting dangling transfer on HELLO");
+        abort_active_transfer();
+    }
+
     ESP_LOGI(TAG, "=== HANDLE_HELLO START ===");
     ESP_LOGI(TAG, "Sending ACK response...");
     esp_err_t ret = send_ack();
@@ -369,7 +381,7 @@ void FileProtocol::handle_device_info() {
     
     // Industrial-Grade: If a new connection handshake comes in while a transfer is active,
     // the previous connection crashed/died. Forcefully abort the dangling transfer.
-    if (m_transfer_active) {
+    if (m_transfer_active || m_transfer_temp_path[0] != '\0') {
         ESP_LOGW(TAG, "Dangling transfer detected on handshake. Aborting...");
         abort_active_transfer();
     }
@@ -662,12 +674,12 @@ void FileProtocol::handle_put_file_begin(const uint8_t* payload, uint16_t length
     memcpy(m_transfer_path, path, path_length);
     m_transfer_path[path_length] = '\0';
 
-    if (path_length + sizeof(".part") > sizeof(m_transfer_temp_path)) {
+    if (path_length + sizeof(UPLOAD_TEMP_SUFFIX) > sizeof(m_transfer_temp_path)) {
         send_error(ERR_PATH_TOO_LONG);
         return;
     }
     memcpy(m_transfer_temp_path, m_transfer_path, path_length);
-    memcpy(m_transfer_temp_path + path_length, ".part", sizeof(".part"));
+    memcpy(m_transfer_temp_path + path_length, UPLOAD_TEMP_SUFFIX, sizeof(UPLOAD_TEMP_SUFFIX));
     
     ESP_LOGI(TAG, "PUT_FILE_BEGIN: %s (%llu bytes)", m_transfer_path, m_transfer_total);
     

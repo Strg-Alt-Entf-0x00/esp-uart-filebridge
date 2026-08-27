@@ -11,11 +11,6 @@ CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
 
 # ============================================================================
-# Partition Table (Increased offset for larger bootloader)
-# ============================================================================
-CONFIG_PARTITION_TABLE_OFFSET=0x9000
-
-# ============================================================================
 # UART File Bridge Component Configuration
 # ============================================================================
 CONFIG_UART_FILEBRIDGE_NUM=1

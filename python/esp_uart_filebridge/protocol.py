@@ -126,14 +126,7 @@ class ESP32Protocol:
             self._rx_sequence = None
             self.ser.reset_input_buffer()
             self._drain_boot_noise()
-            
-            # Force clear any stuck transfer state on the ESP32
-            try:
-                self._send_frame(CMD_PUT_FILE_END)
-                self._wait_ack(timeout_sec=0.5)
-            except Exception:
-                pass # Ignore if it NACKs (which means no transfer was active)
-                
+
             return self.send_hello()
         except Exception as e:
             logger.error(f"Failed to connect to {port_name}: {e}")

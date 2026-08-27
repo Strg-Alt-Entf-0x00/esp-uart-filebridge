@@ -56,6 +56,7 @@ esp_err_t FilesystemManager::init(const char *mount_point, bool do_mount) {
         ESP_LOGI(TAG, "External SD mount assumed at %s", m_mount_point);
         m_sd_mounted = true;  // Trust caller
         m_owns_mount = false;
+        cleanup_partial_uploads();
         return ESP_OK;
     }
 
@@ -63,8 +64,57 @@ esp_err_t FilesystemManager::init(const char *mount_point, bool do_mount) {
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "SD mount failed: %s - file transfer unavailable", esp_err_to_name(ret));
         /* Non-fatal: system continues, transfers will return ERR_FS_NOT_MOUNTED */
+    } else {
+        cleanup_partial_uploads();
     }
     return ESP_OK;
+}
+
+esp_err_t FilesystemManager::cleanup_partial_uploads() {
+    if (!m_sd_mounted) return ESP_ERR_INVALID_STATE;
+    return cleanup_partial_uploads_in_directory(m_mount_point);
+}
+
+esp_err_t FilesystemManager::cleanup_partial_uploads_in_directory(const char* path) {
+    DIR* dir = opendir(path);
+    if (!dir) return ESP_FAIL;
+
+    constexpr const char* suffix = ".esp-uart-filebridge.part";
+    esp_err_t result = ESP_OK;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+
+        const size_t name_len = strlen(entry->d_name);
+        const size_t path_len = strlen(path);
+        if (path_len + 1 + name_len >= 256) {
+            result = ESP_FAIL;
+            continue;
+        }
+
+        char full_path[256];
+        memcpy(full_path, path, path_len);
+        full_path[path_len] = '/';
+        memcpy(full_path + path_len + 1, entry->d_name, name_len + 1);
+
+        struct stat st;
+        if (stat(full_path, &st) != 0) {
+            result = ESP_FAIL;
+            continue;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            if (cleanup_partial_uploads_in_directory(full_path) != ESP_OK) result = ESP_FAIL;
+            continue;
+        }
+        if (name_len >= strlen(suffix) &&
+            strcmp(entry->d_name + name_len - strlen(suffix), suffix) == 0 &&
+            unlink(full_path) != 0) {
+            result = ESP_FAIL;
+        }
+    }
+
+    closedir(dir);
+    return result;
 }
 
 esp_err_t FilesystemManager::mount_sd() {

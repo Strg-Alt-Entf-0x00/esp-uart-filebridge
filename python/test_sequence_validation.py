@@ -3,6 +3,7 @@ import struct
 
 import pytest
 
+from esp_uart_filebridge.file_manager import ESP32FileManager
 from esp_uart_filebridge.protocol import (
     CMD_ACK,
     CMD_GET_FILE_DATA,
@@ -12,6 +13,26 @@ from esp_uart_filebridge.protocol import (
     PROTO_MAGIC_0,
     PROTO_MAGIC_1,
 )
+
+
+class FailingUploadProtocol:
+    chunk_size = 4
+
+    def __init__(self):
+        self.calls = []
+
+    def begin_write_stream(self, path, file_size):
+        self.calls.append(("begin", path, file_size))
+
+    def write_stream_data(self, chunk):
+        self.calls.append(("data", chunk))
+        raise ESP32ProtocolError("simulated write failure")
+
+    def end_write_stream(self):
+        self.calls.append(("end",))
+
+    def abort_write_stream(self):
+        self.calls.append(("abort",))
 
 
 class DummySerial:
@@ -101,3 +122,18 @@ def test_read_file_rejects_download_size_mismatch():
 
     with pytest.raises(ESP32ProtocolError, match="size"):
         proto.read_file('/sd/test.bin')
+
+
+def test_upload_failure_sends_abort_and_does_not_finish(tmp_path):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"abcdefgh")
+    proto = FailingUploadProtocol()
+
+    with pytest.raises(ESP32ProtocolError, match="simulated write failure"):
+        ESP32FileManager(proto).upload_file(source, "/sd/target.bin")
+
+    assert proto.calls == [
+        ("begin", "/sd/target.bin", 8),
+        ("data", b"abcd"),
+        ("abort",),
+    ]

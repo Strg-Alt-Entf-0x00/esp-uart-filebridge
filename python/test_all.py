@@ -73,7 +73,7 @@ def log_warn(msg):
     print(f"{Colors.YELLOW}[WARN]{Colors.ENDC} {msg}")
 
 
-class TestRunner:
+class LiveTestRunner:
     def __init__(self, port, baud=3000000):
         self.port = port
         self.baud = baud
@@ -524,7 +524,7 @@ def main():
     
     args = parser.parse_args()
     
-    runner = TestRunner(args.port, args.baud)
+    runner = LiveTestRunner(args.port, args.baud)
     success = runner.run_all_tests(test_webdav=args.test_webdav)
     
     sys.exit(0 if success else 1)

@@ -46,6 +46,7 @@ public:
     esp_err_t hash_file(const char* path, uint32_t* hash);
     esp_err_t format_sd();
     esp_err_t validate_path(const char* path);
+    esp_err_t cleanup_partial_uploads();
 
 private:
     bool m_initialized = false;
@@ -58,4 +59,5 @@ private:
 
     bool is_sd_path(const char* path);
     esp_err_t delete_directory_recursive(const char* path);
+    esp_err_t cleanup_partial_uploads_in_directory(const char* path);
 };
