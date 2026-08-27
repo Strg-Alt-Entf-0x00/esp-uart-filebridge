@@ -136,4 +136,4 @@ def test_upload_failure_sends_abort_and_does_not_finish(tmp_path):
         ("begin", "/sd/target.bin", 8),
         ("data", b"abcd"),
         ("abort",),
-    ]
+    ] * 3

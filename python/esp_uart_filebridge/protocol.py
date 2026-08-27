@@ -320,7 +320,7 @@ class ESP32Protocol:
         
         entries = []
         while True:
-            cmd, payload = self._receive_frame(timeout_sec=10.0)
+            cmd, payload = self._receive_frame(timeout_sec=120.0)
             if cmd == CMD_LIST_END:
                 break
             elif cmd == CMD_LIST_ENTRY:
@@ -349,7 +349,7 @@ class ESP32Protocol:
 
         data = bytearray()
         while True:
-            cmd, payload = self._receive_frame(timeout_sec=10.0)
+            cmd, payload = self._receive_frame(timeout_sec=120.0)
             if cmd == CMD_GET_FILE_END:
                 break
             elif cmd == CMD_GET_FILE_DATA:
@@ -484,7 +484,7 @@ class ESP32Protocol:
         self._send_frame(CMD_HASH_FILE, path_bytes)
         
         # Receive response (firmware sends CMD_HASH_FILE back with hash in payload)
-        cmd, payload = self._receive_frame(timeout_sec=10.0)
+        cmd, payload = self._receive_frame(timeout_sec=120.0)
         
         # Check for NACK
         if cmd == CMD_NACK:
@@ -531,4 +531,5 @@ class ESP32Protocol:
         self._send_frame(CMD_COPY, payload)
         if not self._wait_ack():
             raise ESP32ProtocolError("NACK on COPY")
+
 
