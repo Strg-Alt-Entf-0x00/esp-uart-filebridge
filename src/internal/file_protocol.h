@@ -130,6 +130,7 @@ private:
     uint64_t m_transfer_total = 0;
     bool m_transfer_failed = false;
     char m_transfer_path[256];
+    char m_transfer_temp_path[256];
     bool m_benchmark_mode = false;
     
     // Command handlers

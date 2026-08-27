@@ -318,9 +318,15 @@ void FileProtocol::reset_rx_buffer() {
 }
 
 void FileProtocol::abort_active_transfer() {
+    const bool had_active_transfer = m_transfer_active;
+
     if (m_transfer_file) {
         fclose(m_transfer_file);
         m_transfer_file = nullptr;
+    }
+
+    if (had_active_transfer && !m_benchmark_mode && m_transfer_temp_path[0] != '\0') {
+        unlink(m_transfer_temp_path);
     }
     
     if (m_sd_write_buffer) {
@@ -337,6 +343,9 @@ void FileProtocol::abort_active_transfer() {
     m_transfer_bytes = 0;
     m_transfer_total = 0;
     m_transfer_failed = false;
+    m_transfer_path[0] = '\0';
+    m_transfer_temp_path[0] = '\0';
+    m_benchmark_mode = false;
 }
 
 // ============================================================================
@@ -652,6 +661,13 @@ void FileProtocol::handle_put_file_begin(const uint8_t* payload, uint16_t length
     m_transfer_total = *size_ptr;
     memcpy(m_transfer_path, path, path_length);
     m_transfer_path[path_length] = '\0';
+
+    if (path_length + sizeof(".part") > sizeof(m_transfer_temp_path)) {
+        send_error(ERR_PATH_TOO_LONG);
+        return;
+    }
+    memcpy(m_transfer_temp_path, m_transfer_path, path_length);
+    memcpy(m_transfer_temp_path + path_length, ".part", sizeof(".part"));
     
     ESP_LOGI(TAG, "PUT_FILE_BEGIN: %s (%llu bytes)", m_transfer_path, m_transfer_total);
     
@@ -703,9 +719,9 @@ void FileProtocol::handle_put_file_begin(const uint8_t* payload, uint16_t length
     }
     
     // Open file for writing
-    m_transfer_file = fopen(m_transfer_path, "wb");
+    m_transfer_file = fopen(m_transfer_temp_path, "wb");
     if (!m_transfer_file) {
-        ESP_LOGE(TAG, "Failed to create file: %s", m_transfer_path);
+        ESP_LOGE(TAG, "Failed to create temporary file: %s", m_transfer_temp_path);
         send_error(ERR_IO_ERROR);
         return;
     }
@@ -752,7 +768,6 @@ void FileProtocol::handle_put_file_data(const uint8_t* payload, uint16_t length)
         ESP_LOGE(TAG, "Upload exceeds declared size: received=%llu, chunk=%u, total=%llu",
                  m_transfer_bytes, length, m_transfer_total);
         m_transfer_failed = true;
-        unlink(m_transfer_path);
         abort_active_transfer();
         send_error(ERR_IO_ERROR);
         return;
@@ -799,7 +814,6 @@ void FileProtocol::handle_put_file_end() {
     if (m_transfer_failed || m_transfer_bytes != m_transfer_total) {
         ESP_LOGE(TAG, "Upload size mismatch: received=%llu, expected=%llu",
                  m_transfer_bytes, m_transfer_total);
-        unlink(m_transfer_path);
         abort_active_transfer();
         send_error(ERR_IO_ERROR);
         return;
@@ -810,12 +824,32 @@ void FileProtocol::handle_put_file_end() {
     
     ESP_LOGI(TAG, "PUT_FILE_END: %llu bytes received", m_transfer_bytes);
     
-    if (m_transfer_file) {
-        fclose(m_transfer_file);
+    if (m_transfer_file && fclose(m_transfer_file) != 0) {
         m_transfer_file = nullptr;
+        abort_active_transfer();
+        send_error(ERR_IO_ERROR);
+        return;
+    }
+    m_transfer_file = nullptr;
+
+    if (m_sd_write_buffer) {
+        free(m_sd_write_buffer);
+        m_sd_write_buffer = nullptr;
+    }
+
+    if (rename(m_transfer_temp_path, m_transfer_path) != 0) {
+        ESP_LOGE(TAG, "Failed to commit upload %s: errno=%d", m_transfer_path, errno);
+        abort_active_transfer();
+        send_error(ERR_IO_ERROR);
+        return;
     }
     
     m_transfer_active = false;
+    m_transfer_path[0] = '\0';
+    m_transfer_temp_path[0] = '\0';
+    m_transfer_bytes = 0;
+    m_transfer_total = 0;
+    m_benchmark_mode = false;
     
     send_ack();
 }
@@ -824,11 +858,6 @@ void FileProtocol::handle_put_file_abort() {
     ESP_LOGW(TAG, "PUT_FILE_ABORT");
     
     abort_active_transfer();
-    
-    // Delete partial file
-    if (strlen(m_transfer_path) > 0) {
-        unlink(m_transfer_path);
-    }
     
     send_ack();
 }
