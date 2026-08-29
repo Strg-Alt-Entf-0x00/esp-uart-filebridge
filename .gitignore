@@ -6,8 +6,8 @@ __pycache__/
 *.egg-info/
 dist/
 .venv/
-# Temporary documentation folder (only for development)
-.docs/
+# Keep development notes local, but version the storage backend design.
+.docs/*
 
 # IDE/Editor specific files
 .clangd
